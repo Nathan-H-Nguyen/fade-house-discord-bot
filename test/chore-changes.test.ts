@@ -10,7 +10,10 @@ test("a Housemate retires a Chore and it leaves the list", () => {
   });
   house.run("Alice", { name: "chore add", choreName: "Bins", scope: "global" });
 
-  const retired = house.run("Dan", { name: "chore retire", chore: "Kitchen" });
+  const retired = house.run("Dan", {
+    name: "chore retire",
+    choreName: "Kitchen",
+  });
 
   expect(retired).toEqual({
     reply: {
@@ -32,7 +35,10 @@ test("a typed Chore name matches regardless of case", () => {
     scope: "global",
   });
 
-  const retired = house.run("Dan", { name: "chore retire", chore: "kITCHEN" });
+  const retired = house.run("Dan", {
+    name: "chore retire",
+    choreName: "kITCHEN",
+  });
 
   expect(retired.reply.content).toBe(
     "Retired Kitchen. It will not be handed out from next month.",
@@ -46,10 +52,16 @@ test("retiring a Chore that is not in the pool is refused", () => {
     choreName: "Kitchen",
     scope: "global",
   });
-  house.run("Alice", { name: "chore retire", chore: "Kitchen" });
+  house.run("Alice", { name: "chore retire", choreName: "Kitchen" });
 
-  const again = house.run("Ben", { name: "chore retire", chore: "Kitchen" });
-  const unknown = house.run("Ben", { name: "chore retire", chore: "*Bins*" });
+  const again = house.run("Ben", {
+    name: "chore retire",
+    choreName: "Kitchen",
+  });
+  const unknown = house.run("Ben", {
+    name: "chore retire",
+    choreName: "*Bins*",
+  });
 
   expect(again.reply).toEqual({
     content: "There is no active Chore named Kitchen.",
@@ -70,7 +82,7 @@ test("a Housemate renames a Chore", () => {
 
   const edited = house.run("Ben", {
     name: "chore edit",
-    chore: "Kitchen",
+    choreName: "Kitchen",
     newName: "Floor 1 kitchen",
   });
 
@@ -93,7 +105,7 @@ test("a Housemate moves a Chore to another Scope", () => {
 
   const edited = house.run("Chloe", {
     name: "chore edit",
-    chore: "Bathroom",
+    choreName: "Bathroom",
     scope: "floor-3",
   });
 
@@ -122,7 +134,7 @@ test("a Housemate renames and moves a Chore at once", () => {
 
   const edited = house.run("Alice", {
     name: "chore edit",
-    chore: "Bathroom",
+    choreName: "Bathroom",
     newName: "Floor 1 bathroom",
     scope: "floor-1",
   });
@@ -143,10 +155,13 @@ test("an edit that changes nothing is refused", () => {
     scope: "global",
   });
 
-  const empty = house.run("Alice", { name: "chore edit", chore: "Kitchen" });
+  const empty = house.run("Alice", {
+    name: "chore edit",
+    choreName: "Kitchen",
+  });
   const same = house.run("Alice", {
     name: "chore edit",
-    chore: "kitchen",
+    choreName: "kitchen",
     newName: "Kitchen",
     scope: "global",
   });
@@ -168,17 +183,17 @@ test("a new name is trimmed, and a blank or overlong one is refused", () => {
 
   const blank = house.run("Alice", {
     name: "chore edit",
-    chore: "Kitchen",
+    choreName: "Kitchen",
     newName: "   ",
   });
   const overlong = house.run("Alice", {
     name: "chore edit",
-    chore: "Kitchen",
+    choreName: "Kitchen",
     newName: "x".repeat(101),
   });
   const padded = house.run("Alice", {
     name: "chore edit",
-    chore: "Kitchen",
+    choreName: "Kitchen",
     newName: "  Galley  ",
   });
 
@@ -235,7 +250,7 @@ test("renaming a Chore to another active Chore's name is refused, ignoring case"
 
   const duplicate = house.run("Alice", {
     name: "chore edit",
-    chore: "Bins",
+    choreName: "Bins",
     newName: "kitchen",
   });
 
@@ -257,7 +272,7 @@ test("a Chore can be renamed to a different case of its own name", () => {
 
   const edited = house.run("Alice", {
     name: "chore edit",
-    chore: "kitchen",
+    choreName: "kitchen",
     newName: "Kitchen",
   });
 
@@ -271,7 +286,7 @@ test("a retired Chore's name can be used again", () => {
     choreName: "Kitchen",
     scope: "global",
   });
-  house.run("Alice", { name: "chore retire", chore: "Kitchen" });
+  house.run("Alice", { name: "chore retire", choreName: "Kitchen" });
 
   const added = house.run("Alice", {
     name: "chore add",
@@ -292,12 +307,12 @@ test("members who are not Housemates cannot edit or retire Chores", () => {
 
   const edited = house.run("Guest", {
     name: "chore edit",
-    chore: "Kitchen",
+    choreName: "Kitchen",
     newName: "Galley",
   });
   const retired = house.run("Mixed", {
     name: "chore retire",
-    chore: "Kitchen",
+    choreName: "Kitchen",
   });
 
   expect(edited.reply.content).toBe(
@@ -329,7 +344,7 @@ test("Chore autocomplete suggests active Chores containing the typed text", () =
     choreName: "Old kitchen",
     scope: "global",
   });
-  house.run("Alice", { name: "chore retire", chore: "Old kitchen" });
+  house.run("Alice", { name: "chore retire", choreName: "Old kitchen" });
 
   expect(house.suggest("Chloe", { name: "chore", text: "KITCH" })).toEqual([
     { label: "Floor 3 kitchen (Floor 3)", value: "Floor 3 kitchen" },

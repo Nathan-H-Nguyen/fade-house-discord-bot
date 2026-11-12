@@ -45,8 +45,12 @@ export function activeChores(db: Database.Database): StoredChore[] {
 }
 
 /** Chore names are compared ignoring case, so "Kitchen" and "kitchen" are the same Chore. */
-export function sameChoreName(a: string, b: string): boolean {
-  return a.toLowerCase() === b.toLowerCase();
+export function foldChoreName(name: string): string {
+  return name.toLowerCase();
+}
+
+function sameChoreName(a: string, b: string): boolean {
+  return foldChoreName(a) === foldChoreName(b);
 }
 
 export function findActiveChore(
@@ -56,7 +60,7 @@ export function findActiveChore(
   return activeChores(db).find((c) => sameChoreName(c.name, name));
 }
 
-/** Changes a Chore's name or Scope; Assignments made before keep their own record. */
+/** Changes a Chore's name or Scope in place, from now on. */
 export function updateChore(db: Database.Database, chore: StoredChore): void {
   db.prepare("UPDATE chores SET name = ?, scope = ? WHERE id = ?").run(
     chore.name,

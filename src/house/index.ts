@@ -7,6 +7,7 @@ import {
   activeChores,
   addChore,
   findActiveChore,
+  foldChoreName,
   maxChoreNameLength,
   retireChore,
   scopeLabels,
@@ -44,9 +45,9 @@ export type Command =
   | { name: "ping" }
   | { name: "chore add"; choreName: string; scope: Scope }
   | { name: "chore list" }
-  /** `chore` is the name of an active Chore, as picked by autocomplete or typed. */
-  | { name: "chore edit"; chore: string; newName?: string; scope?: Scope }
-  | { name: "chore retire"; chore: string };
+  /** `choreName` names an active Chore, picked by autocomplete or typed in any case. */
+  | { name: "chore edit"; choreName: string; newName?: string; scope?: Scope }
+  | { name: "chore retire"; choreName: string };
 
 export interface Reply {
   content: string;
@@ -65,13 +66,16 @@ export interface CommandResult {
 /** An option the caller is filling in, with the text typed so far. */
 export type SuggestionField = { name: "chore"; text: string };
 
-/** One autocomplete choice: what the member sees, and what the command receives. */
+/** One autocomplete choice: what the Housemate sees, and what the command receives. */
 export interface Suggestion {
   label: string;
   value: string;
 }
 
-/** Discord shows at most this many autocomplete choices, each label at most this long. */
+/**
+ * The House offers at most this many suggestions, each label at most this long,
+ * which also keeps them within what Discord accepts.
+ */
 const maxSuggestions = 25;
 const maxSuggestionLabelLength = 100;
 
@@ -125,9 +129,7 @@ export function openHouse(options: {
   }
 
   function noSuchChore(name: string): CommandResult {
-    return reply(
-      `There is no active Chore named ${escapeMarkdown(name.trim())}.`,
-    );
+    return reply(`There is no active Chore named ${escapeMarkdown(name)}.`);
   }
 
   return {
@@ -137,9 +139,9 @@ export function openHouse(options: {
 
     suggest({ actor, roster, field }) {
       if (resolveMember(roster, actor.memberId).kind !== "housemate") return [];
-      const text = field.text.trim().toLowerCase();
+      const text = foldChoreName(field.text.trim());
       return activeChores(db)
-        .filter((c) => c.name.toLowerCase().includes(text))
+        .filter((c) => foldChoreName(c.name).includes(text))
         .slice(0, maxSuggestions)
         .map((c) => {
           const label = `${c.name} (${scopeLabels[c.scope]})`;
@@ -198,8 +200,9 @@ export function openHouse(options: {
         }
 
         case "chore edit": {
-          const chore = findActiveChore(db, command.chore.trim());
-          if (!chore) return noSuchChore(command.chore);
+          const choreName = command.choreName.trim();
+          const chore = findActiveChore(db, choreName);
+          if (!chore) return noSuchChore(choreName);
           if (command.newName === undefined && command.scope === undefined) {
             return reply(
               `Give ${escapeMarkdown(chore.name)} a new name, a new Scope or both.`,
@@ -229,8 +232,9 @@ export function openHouse(options: {
         }
 
         case "chore retire": {
-          const chore = findActiveChore(db, command.chore.trim());
-          if (!chore) return noSuchChore(command.chore);
+          const choreName = command.choreName.trim();
+          const chore = findActiveChore(db, choreName);
+          if (!chore) return noSuchChore(choreName);
           retireChore(db, chore.id);
           return reply(
             `Retired ${escapeMarkdown(chore.name)}. It will not be handed out from next month.`,

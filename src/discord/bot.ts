@@ -107,7 +107,12 @@ async function handleAutocomplete(
 
   const focused = interaction.options.getFocused(true);
   if (focused.name !== "chore") {
-    throw new Error(`No autocomplete for option "${focused.name}"`);
+    // Answer anyway, so Discord shows an empty list rather than an error.
+    console.error(
+      `/${interaction.commandName} has no autocomplete for "${focused.name}"`,
+    );
+    await interaction.respond([]);
+    return;
   }
   const suggestions = house.suggest({
     actor: actorOf(interaction),
@@ -161,7 +166,7 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
       const scope = interaction.options.getString("scope");
       return {
         name: "chore edit",
-        chore: interaction.options.getString("chore", true),
+        choreName: interaction.options.getString("chore", true),
         ...(newName === null ? {} : { newName }),
         ...(scope === null ? {} : { scope: toScope(scope) }),
       };
@@ -169,7 +174,7 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
     case "chore retire":
       return {
         name: "chore retire",
-        chore: interaction.options.getString("chore", true),
+        choreName: interaction.options.getString("chore", true),
       };
     case "chore list":
       return { name: "chore list" };
