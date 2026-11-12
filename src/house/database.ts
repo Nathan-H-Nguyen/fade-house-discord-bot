@@ -12,6 +12,9 @@ const migrations: readonly string[] = [
     retired INTEGER NOT NULL DEFAULT 0 CHECK (retired IN (0, 1)),
     added_at TEXT NOT NULL
   ) STRICT`,
+  // A backstop for the House's own check, which also folds non-ASCII case that NOCASE does not.
+  // Fails on a database that already holds active Chores whose names differ only in case.
+  `CREATE UNIQUE INDEX chores_active_name ON chores (name COLLATE NOCASE) WHERE retired = 0`,
 ];
 
 /** Opens the database at `path` (or `:memory:`) and brings its schema up to date. */

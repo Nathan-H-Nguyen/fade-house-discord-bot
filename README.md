@@ -5,11 +5,17 @@ The vocabulary (Housemate, Chore, Scope, Assignment and so on) is defined in [GL
 
 ## Commands
 
-| Command                     | Who        | What it does                                                     |
-| --------------------------- | ---------- | ---------------------------------------------------------------- |
-| `/ping`                     | Anyone     | Confirms the bot is connected.                                   |
-| `/chore add <name> <scope>` | Housemates | Adds a Chore to the pool, with Scope Global, Floor 1 or Floor 3. |
-| `/chore list`               | Housemates | Lists the active Chores grouped by Scope.                        |
+| Command                              | Who        | What it does                                                     |
+| ------------------------------------ | ---------- | ---------------------------------------------------------------- |
+| `/ping`                              | Anyone     | Confirms the bot is connected.                                   |
+| `/chore add <name> <scope>`          | Housemates | Adds a Chore to the pool, with Scope Global, Floor 1 or Floor 3. |
+| `/chore edit <chore> [name] [scope]` | Housemates | Renames a Chore or changes its Scope.                            |
+| `/chore retire <chore>`              | Housemates | Takes a Chore out of the pool, keeping its history.              |
+| `/chore list`                        | Housemates | Lists the active Chores grouped by Scope.                        |
+
+Edit and retire suggest active Chores as you type.
+Active Chore names must be unique, ignoring case.
+Changes to the pool apply from the next monthly run and never alter existing Assignments.
 
 A Housemate is a member with exactly one of the `Floor 1` or `Floor 3` roles.
 Anyone else gets a private refusal explaining why.

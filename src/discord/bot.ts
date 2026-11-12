@@ -6,12 +6,14 @@ import {
   PermissionFlagsBits,
   REST,
   Routes,
+  type AutocompleteInteraction,
   type ChatInputCommandInteraction,
   type Guild,
 } from "discord.js";
 import type { Config } from "../config.ts";
 import {
   scopes,
+  type Actor,
   type Command,
   type House,
   type Roster,
@@ -49,11 +51,14 @@ export async function startBot(config: Config, house: House): Promise<Client> {
   await guild.members.fetch();
 
   client.on(Events.InteractionCreate, (interaction) => {
-    if (
-      !interaction.isChatInputCommand() ||
-      interaction.guildId !== config.guildId
-    )
+    if (interaction.guildId !== config.guildId) return;
+    if (interaction.isAutocomplete()) {
+      handleAutocomplete(interaction, house).catch((error: unknown) => {
+        console.error(`/${interaction.commandName} autocomplete failed`, error);
+      });
       return;
+    }
+    if (!interaction.isChatInputCommand()) return;
     handleCommand(interaction, house).catch((error: unknown) => {
       console.error(`/${interaction.commandName} failed`, error);
       const reply = {
@@ -81,12 +86,7 @@ async function handleCommand(
   if (!guild) throw new Error("Command arrived without a cached guild");
 
   const result = house.handle({
-    actor: {
-      memberId: interaction.user.id,
-      isAdmin:
-        interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ??
-        false,
-    },
+    actor: actorOf(interaction),
     roster: rosterOf(guild),
     command: toCommand(interaction),
   });
@@ -96,6 +96,44 @@ async function handleCommand(
     allowedMentions: { parse: [] },
     ...(result.reply.private ? { flags: MessageFlags.Ephemeral } : {}),
   });
+}
+
+async function handleAutocomplete(
+  interaction: AutocompleteInteraction,
+  house: House,
+): Promise<void> {
+  const guild = interaction.guild;
+  if (!guild) throw new Error("Autocomplete arrived without a cached guild");
+
+  const focused = interaction.options.getFocused(true);
+  if (focused.name !== "chore") {
+    // Answer anyway, so Discord shows an empty list rather than an error.
+    console.error(
+      `/${interaction.commandName} has no autocomplete for "${focused.name}"`,
+    );
+    await interaction.respond([]);
+    return;
+  }
+  const suggestions = house.suggest({
+    actor: actorOf(interaction),
+    roster: rosterOf(guild),
+    field: { name: "chore", text: focused.value },
+  });
+
+  await interaction.respond(
+    suggestions.map((s) => ({ name: s.label, value: s.value })),
+  );
+}
+
+function actorOf(
+  interaction: ChatInputCommandInteraction | AutocompleteInteraction,
+): Actor {
+  return {
+    memberId: interaction.user.id,
+    isAdmin:
+      interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ??
+      false,
+  };
 }
 
 function rosterOf(guild: Guild): Roster {
@@ -122,6 +160,21 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
         name: "chore add",
         choreName: interaction.options.getString("name", true),
         scope: toScope(interaction.options.getString("scope", true)),
+      };
+    case "chore edit": {
+      const newName = interaction.options.getString("name");
+      const scope = interaction.options.getString("scope");
+      return {
+        name: "chore edit",
+        choreName: interaction.options.getString("chore", true),
+        ...(newName === null ? {} : { newName }),
+        ...(scope === null ? {} : { scope: toScope(scope) }),
+      };
+    }
+    case "chore retire":
+      return {
+        name: "chore retire",
+        choreName: interaction.options.getString("chore", true),
       };
     case "chore list":
       return { name: "chore list" };
