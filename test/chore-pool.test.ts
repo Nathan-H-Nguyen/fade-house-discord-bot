@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
 import { createTestHouse } from "./harness.ts";
 
-test("a Housemate adds a Chore and sees it in the list under its Scope", () => {
+test("a Housemate adds a Chore and sees it in the list under its Scope", async () => {
   const house = createTestHouse();
 
-  const added = house.run("Alice", {
+  const added = await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
@@ -14,7 +14,7 @@ test("a Housemate adds a Chore and sees it in the list under its Scope", () => {
     content: "Added Kitchen to the Global Chores.",
     private: true,
   });
-  expect(house.run("Chloe", { name: "chore list" }).reply).toEqual({
+  expect((await house.run("Chloe", { name: "chore list" })).reply).toEqual({
     content: [
       "**Global**",
       "- Kitchen",
@@ -29,10 +29,10 @@ test("a Housemate adds a Chore and sees it in the list under its Scope", () => {
   });
 });
 
-test("a member without a floor role is privately refused and adds nothing", () => {
+test("a member without a floor role is privately refused and adds nothing", async () => {
   const house = createTestHouse();
 
-  const added = house.run("Guest", {
+  const added = await house.run("Guest", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
@@ -47,14 +47,14 @@ test("a member without a floor role is privately refused and adds nothing", () =
     outbound: [],
   });
   expect(
-    house.run("Alice", { name: "chore list" }).reply.content,
+    (await house.run("Alice", { name: "chore list" })).reply.content,
   ).not.toContain("Kitchen");
 });
 
-test("a member with two floor roles is privately refused and told to fix their roles", () => {
+test("a member with two floor roles is privately refused and told to fix their roles", async () => {
   const house = createTestHouse();
 
-  const listed = house.run("Mixed", { name: "chore list" });
+  const listed = await house.run("Mixed", { name: "chore list" });
 
   expect(listed).toEqual({
     reply: {
@@ -66,31 +66,35 @@ test("a member with two floor roles is privately refused and told to fix their r
   });
 });
 
-test("the list groups active Chores by Scope, alphabetically within each", () => {
+test("the list groups active Chores by Scope, alphabetically within each", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Vacuum stairs",
     scope: "global",
   });
-  house.run("Ben", {
+  await house.run("Ben", {
     name: "chore add",
     choreName: "Floor 1 bathroom",
     scope: "floor-1",
   });
-  house.run("Dan", {
+  await house.run("Dan", {
     name: "chore add",
     choreName: "Floor 3 bathroom",
     scope: "floor-3",
   });
-  house.run("Eve", { name: "chore add", choreName: "bins", scope: "global" });
-  house.run("Finn", {
+  await house.run("Eve", {
+    name: "chore add",
+    choreName: "bins",
+    scope: "global",
+  });
+  await house.run("Finn", {
     name: "chore add",
     choreName: "Floor 3 kitchen",
     scope: "floor-3",
   });
 
-  expect(house.run("Chloe", { name: "chore list" }).reply.content).toBe(
+  expect((await house.run("Chloe", { name: "chore list" })).reply.content).toBe(
     [
       "**Global**",
       "- bins",
@@ -106,15 +110,15 @@ test("the list groups active Chores by Scope, alphabetically within each", () =>
   );
 });
 
-test("a Chore name is trimmed, and a blank one is refused", () => {
+test("a Chore name is trimmed, and a blank one is refused", async () => {
   const house = createTestHouse();
 
-  const blank = house.run("Alice", {
+  const blank = await house.run("Alice", {
     name: "chore add",
     choreName: "   ",
     scope: "global",
   });
-  const padded = house.run("Alice", {
+  const padded = await house.run("Alice", {
     name: "chore add",
     choreName: "  Bins  ",
     scope: "global",
@@ -125,15 +129,15 @@ test("a Chore name is trimmed, and a blank one is refused", () => {
     private: true,
   });
   expect(padded.reply.content).toBe("Added Bins to the Global Chores.");
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
-    /^\*\*Global\*\*\n- Bins\n\n/,
-  );
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toMatch(/^\*\*Global\*\*\n- Bins\n\n/);
 });
 
-test("a Chore name longer than 100 characters is refused", () => {
+test("a Chore name longer than 100 characters is refused", async () => {
   const house = createTestHouse();
 
-  const added = house.run("Alice", {
+  const added = await house.run("Alice", {
     name: "chore add",
     choreName: "x".repeat(101),
     scope: "global",
@@ -143,15 +147,15 @@ test("a Chore name longer than 100 characters is refused", () => {
     content: "A Chore name can be at most 100 characters.",
     private: true,
   });
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
-    /^\*\*Global\*\*\nNone\n/,
-  );
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toMatch(/^\*\*Global\*\*\nNone\n/);
 });
 
-test("Chore names show exactly as typed, even with markdown characters", () => {
+test("Chore names show exactly as typed, even with markdown characters", async () => {
   const house = createTestHouse();
 
-  const added = house.run("Alice", {
+  const added = await house.run("Alice", {
     name: "chore add",
     choreName: "*Bins* & `recycling`",
     scope: "global",
@@ -160,26 +164,28 @@ test("Chore names show exactly as typed, even with markdown characters", () => {
   expect(added.reply.content).toBe(
     "Added \\*Bins\\* & \\`recycling\\` to the Global Chores.",
   );
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
-    /^\*\*Global\*\*\n- \\\*Bins\\\* & \\`recycling\\`\n\n/,
-  );
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toMatch(/^\*\*Global\*\*\n- \\\*Bins\\\* & \\`recycling\\`\n\n/);
 });
 
-test("Chore names that look like headings, quotes or links show literally", () => {
+test("Chore names that look like headings, quotes or links show literally", async () => {
   const house = createTestHouse();
 
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "# Kitchen",
     scope: "global",
   });
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "> [Bins](https://example.com)",
     scope: "global",
   });
 
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toMatch(
     /^\*\*Global\*\*\n- \\# Kitchen\n- \\> \\\[Bins\\\]\(https:\/\/example\.com\)\n\n/,
   );
 });

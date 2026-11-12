@@ -6,16 +6,21 @@ import { openHouse } from "./house/index.ts";
 const databasePath = "fade-house.db";
 
 const config = readConfig();
-const house = openHouse({ databasePath, clock: { now: () => new Date() } });
+const house = openHouse({
+  databasePath,
+  clock: { now: () => new Date() },
+  timezone: config.timezone,
+  // Discord's limit for bots in a server without boosts.
+  attachmentLimitBytes: 10 * 1024 * 1024,
+  isTestServer: config.isTestServer,
+});
 
 await registerCommands(config);
-const client = await startBot(config, house);
+const bot = await startBot(config, house);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     console.log(`Received ${signal}, shutting down`);
-    void client.destroy().finally(() => {
-      house.close();
-    });
+    void bot.stop().finally(() => house.close());
   });
 }

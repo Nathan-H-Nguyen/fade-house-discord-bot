@@ -16,6 +16,7 @@ import {
   type Actor,
   type Command,
   type House,
+  type Outbound,
   type Roster,
   type Scope,
 } from "../house/index.ts";
@@ -26,14 +27,23 @@ export async function registerCommands(config: Config): Promise<void> {
   const rest = new REST().setToken(config.discordToken);
   await rest.put(
     Routes.applicationGuildCommands(config.applicationId, config.guildId),
-    {
-      body: commandDefinitions,
-    },
+    { body: commandDefinitions(config) },
   );
 }
 
-/** Connects to Discord and passes slash commands from the configured guild to the House. */
-export async function startBot(config: Config, house: House): Promise<Client> {
+/** How often the House checks for scheduled jobs that are due. */
+const tickIntervalMs = 60_000;
+
+export interface Bot {
+  /** Stops ticking and disconnects from Discord. */
+  stop(): Promise<void>;
+}
+
+/**
+ * Connects to Discord, passes slash commands from the configured guild to the House,
+ * and ticks the House on startup and about once a minute.
+ */
+export async function startBot(config: Config, house: House): Promise<Bot> {
   // Server Members is a privileged intent; it must be enabled in the Developer Portal.
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
@@ -50,6 +60,7 @@ export async function startBot(config: Config, house: House): Promise<Client> {
   const guild = await client.guilds.fetch(config.guildId);
   await guild.members.fetch();
 
+  const deliver = deliverTo(client, config);
   client.on(Events.InteractionCreate, (interaction) => {
     if (interaction.guildId !== config.guildId) return;
     if (interaction.isAutocomplete()) {
@@ -59,7 +70,7 @@ export async function startBot(config: Config, house: House): Promise<Client> {
       return;
     }
     if (!interaction.isChatInputCommand()) return;
-    handleCommand(interaction, house).catch((error: unknown) => {
+    handleCommand(interaction, house, deliver).catch((error: unknown) => {
       console.error(`/${interaction.commandName} failed`, error);
       const reply = {
         content: "Something went wrong. Please try again.",
@@ -75,27 +86,100 @@ export async function startBot(config: Config, house: House): Promise<Client> {
     });
   });
 
-  return client;
+  function tick(): void {
+    house
+      .tick()
+      .then(deliver)
+      .catch((error: unknown) => {
+        console.error("Scheduled jobs failed", error);
+      });
+  }
+  tick();
+  const ticker = setInterval(tick, tickIntervalMs);
+
+  return {
+    async stop() {
+      clearInterval(ticker);
+      await client.destroy();
+    },
+  };
+}
+
+/** Posts the House's outbound messages in their channels, in order. */
+function deliverTo(
+  client: Client,
+  config: Config,
+): (messages: readonly Outbound[]) => Promise<void> {
+  const channelIds: Record<Outbound["channel"], string> = {
+    admin: config.adminChannelId,
+  };
+
+  return async (messages) => {
+    for (const message of messages) {
+      const channelId = channelIds[message.channel];
+      const channel = await client.channels.fetch(channelId);
+      if (!channel?.isSendable()) {
+        throw new Error(`Cannot post in channel ${channelId}`);
+      }
+      const { attachment } = message;
+      try {
+        await channel.send({
+          content: message.content,
+          allowedMentions: { parse: [] },
+          files: attachment
+            ? [
+                {
+                  attachment: Buffer.from(attachment.data),
+                  name: attachment.name,
+                },
+              ]
+            : [],
+        });
+      } catch (error) {
+        if (!attachment) throw error;
+        // The House has already recorded the job as done, so a refused upload must not vanish silently.
+        const reason = error instanceof Error ? error.message : String(error);
+        await channel.send({
+          content: `${message.content}\nDiscord refused the attachment ${attachment.name}: ${reason}`,
+          allowedMentions: { parse: [] },
+        });
+      }
+    }
+  };
 }
 
 async function handleCommand(
   interaction: ChatInputCommandInteraction,
   house: House,
+  deliver: (messages: readonly Outbound[]) => Promise<void>,
 ): Promise<void> {
   const guild = interaction.guild;
   if (!guild) throw new Error("Command arrived without a cached guild");
 
-  const result = house.handle({
+  const command = toCommand(interaction);
+  // Moving the time runs any jobs now due, such as a backup, which can outlast Discord's 3-second
+  // reply deadline. Its reply is always private, so it can be deferred as private up front.
+  const slow = command.name === "dev advance-to";
+  if (slow) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const result = await house.handle({
     actor: actorOf(interaction),
     roster: rosterOf(guild),
-    command: toCommand(interaction),
+    command,
   });
 
-  await interaction.reply({
+  const reply = {
     content: result.reply.content,
     allowedMentions: { parse: [] },
-    ...(result.reply.private ? { flags: MessageFlags.Ephemeral } : {}),
-  });
+  };
+  if (slow) await interaction.editReply(reply);
+  else {
+    await interaction.reply({
+      ...reply,
+      ...(result.reply.private ? { flags: MessageFlags.Ephemeral } : {}),
+    });
+  }
+  await deliver(result.outbound);
 }
 
 async function handleAutocomplete(
@@ -178,6 +262,13 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
       };
     case "chore list":
       return { name: "chore list" };
+    case "dev now":
+      return { name: "dev now" };
+    case "dev advance-to":
+      return {
+        name: "dev advance-to",
+        to: interaction.options.getString("datetime", true),
+      };
     default:
       throw new Error(`Unknown command /${name}`);
   }

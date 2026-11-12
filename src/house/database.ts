@@ -15,6 +15,13 @@ const migrations: readonly string[] = [
   // A backstop for the House's own check, which also folds non-ASCII case that NOCASE does not.
   // Fails on a database that already holds active Chores whose names differ only in case.
   `CREATE UNIQUE INDEX chores_active_name ON chores (name COLLATE NOCASE) WHERE retired = 0`,
+  // The scheduler's ledger: one row per job and period, written once the run completes.
+  `CREATE TABLE job_runs (
+    job TEXT NOT NULL,
+    period TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    PRIMARY KEY (job, period)
+  ) STRICT`,
 ];
 
 /** Opens the database at `path` (or `:memory:`) and brings its schema up to date. */
