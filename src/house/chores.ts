@@ -31,10 +31,41 @@ export function addChore(
   );
 }
 
-export function activeChores(db: Database.Database): Chore[] {
+/** A Chore as stored, with the id that stays the same through edits. */
+export interface StoredChore extends Chore {
+  id: number;
+}
+
+export function activeChores(db: Database.Database): StoredChore[] {
   return db
-    .prepare<[], Chore>(
-      "SELECT name, scope FROM chores WHERE retired = 0 ORDER BY name COLLATE NOCASE, id",
+    .prepare<[], StoredChore>(
+      "SELECT id, name, scope FROM chores WHERE retired = 0 ORDER BY name COLLATE NOCASE, id",
     )
     .all();
+}
+
+/** Chore names are compared ignoring case, so "Kitchen" and "kitchen" are the same Chore. */
+export function sameChoreName(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+export function findActiveChore(
+  db: Database.Database,
+  name: string,
+): StoredChore | undefined {
+  return activeChores(db).find((c) => sameChoreName(c.name, name));
+}
+
+/** Changes a Chore's name or Scope; Assignments made before keep their own record. */
+export function updateChore(db: Database.Database, chore: StoredChore): void {
+  db.prepare("UPDATE chores SET name = ?, scope = ? WHERE id = ?").run(
+    chore.name,
+    chore.scope,
+    chore.id,
+  );
+}
+
+/** Takes a Chore out of the pool, keeping its row so its history survives. */
+export function retireChore(db: Database.Database, id: number): void {
+  db.prepare("UPDATE chores SET retired = 1 WHERE id = ?").run(id);
 }

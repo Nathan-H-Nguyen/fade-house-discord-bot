@@ -1,8 +1,10 @@
 import {
   openHouse,
+  type Actor,
   type Clock,
   type Command,
   type Member,
+  type SuggestionField,
 } from "../src/house/index.ts";
 
 /** The house as it is: two Housemates on Floor 1, four on Floor 3, and members who are not Housemates. */
@@ -29,6 +31,12 @@ export const roster = [
 ] as const satisfies readonly Member[];
 
 type MemberName = (typeof roster)[number]["displayName"];
+
+function actorOf(as: MemberName, isAdmin = false): Actor {
+  const member = roster.find((m) => m.displayName === as);
+  if (!member) throw new Error(`No member named ${as} in the roster fixture`);
+  return { memberId: member.id, isAdmin };
+}
 
 /** A Clock that stays at the time it was given, so tests decide what "now" is. */
 class FakeClock implements Clock {
@@ -58,14 +66,16 @@ export function createTestHouse({ databasePath = ":memory:" } = {}) {
 
     /** Runs a slash command as the named member, who is not an Admin unless stated. */
     run(as: MemberName, command: Command, { isAdmin = false } = {}) {
-      const member = roster.find((m) => m.displayName === as);
-      if (!member)
-        throw new Error(`No member named ${as} in the roster fixture`);
       return house.handle({
-        actor: { memberId: member.id, isAdmin },
+        actor: actorOf(as, isAdmin),
         roster,
         command,
       });
+    },
+
+    /** Asks for autocomplete suggestions as the named member types into an option. */
+    suggest(as: MemberName, field: SuggestionField) {
+      return house.suggest({ actor: actorOf(as), roster, field });
     },
   };
 }

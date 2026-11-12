@@ -1,6 +1,11 @@
 import { SlashCommandBuilder } from "discord.js";
 import { maxChoreNameLength, scopeLabels, scopes } from "../house/index.ts";
 
+const scopeChoices = scopes.map((scope) => ({
+  name: scopeLabels[scope],
+  value: scope,
+}));
+
 /** The slash commands registered in the house server. */
 export const commandDefinitions = [
   new SlashCommandBuilder()
@@ -26,12 +31,45 @@ export const commandDefinitions = [
             .setName("scope")
             .setDescription("Who the Chore can be given to")
             .setRequired(true)
-            .addChoices(
-              scopes.map((scope) => ({
-                name: scopeLabels[scope],
-                value: scope,
-              })),
-            ),
+            .addChoices(scopeChoices),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("edit")
+        .setDescription("Rename a Chore or change its Scope")
+        .addStringOption((option) =>
+          option
+            .setName("chore")
+            .setDescription("The Chore to change")
+            .setRequired(true)
+            .setMaxLength(maxChoreNameLength)
+            .setAutocomplete(true),
+        )
+        .addStringOption((option) =>
+          option
+            .setName("name")
+            .setDescription("Its new name")
+            .setMaxLength(maxChoreNameLength),
+        )
+        .addStringOption((option) =>
+          option
+            .setName("scope")
+            .setDescription("Who it can be given to from now on")
+            .addChoices(scopeChoices),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("retire")
+        .setDescription("Take a Chore out of the pool, keeping its history")
+        .addStringOption((option) =>
+          option
+            .setName("chore")
+            .setDescription("The Chore to retire")
+            .setRequired(true)
+            .setMaxLength(maxChoreNameLength)
+            .setAutocomplete(true),
         ),
     )
     .addSubcommand((sub) =>
