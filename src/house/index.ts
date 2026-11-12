@@ -89,7 +89,7 @@ export function openHouse(options: {
       switch (resolution.kind) {
         case "no floor":
           return reply(
-            "Only Housemates can use chore commands. Ask an Admin to give you the Floor 1 or Floor 3 role.",
+            "Only Housemates can use this command. Ask an Admin to give you the Floor 1 or Floor 3 role.",
           );
         case "several floors":
           return reply(

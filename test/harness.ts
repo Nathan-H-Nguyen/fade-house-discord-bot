@@ -30,8 +30,9 @@ export const roster = [
 
 type MemberName = (typeof roster)[number]["displayName"];
 
-export class FakeClock implements Clock {
-  private current: Date;
+/** A Clock that stays at the time it was given, so tests decide what "now" is. */
+class FakeClock implements Clock {
+  private readonly current: Date;
 
   constructor(start: Date) {
     this.current = new Date(start);
@@ -40,18 +41,21 @@ export class FakeClock implements Clock {
   now(): Date {
     return new Date(this.current);
   }
-
-  set(to: Date): void {
-    this.current = new Date(to);
-  }
 }
 
-export function createTestHouse() {
+/**
+ * Opens a House on the roster fixture, with a fake Clock.
+ * The database is in memory unless a test needs one that outlives the House.
+ */
+export function createTestHouse({ databasePath = ":memory:" } = {}) {
   const clock = new FakeClock(new Date("2026-11-12T18:00:00Z"));
-  const house = openHouse({ databasePath: ":memory:", clock });
+  const house = openHouse({ databasePath, clock });
 
   return {
-    clock,
+    close() {
+      house.close();
+    },
+
     /** Runs a slash command as the named member, who is not an Admin unless stated. */
     run(as: MemberName, command: Command, { isAdmin = false } = {}) {
       const member = roster.find((m) => m.displayName === as);

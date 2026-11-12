@@ -41,7 +41,7 @@ test("a member without a floor role is privately refused and adds nothing", () =
   expect(added).toEqual({
     reply: {
       content:
-        "Only Housemates can use chore commands. Ask an Admin to give you the Floor 1 or Floor 3 role.",
+        "Only Housemates can use this command. Ask an Admin to give you the Floor 1 or Floor 3 role.",
       private: true,
     },
     outbound: [],
@@ -162,5 +162,24 @@ test("Chore names show exactly as typed, even with markdown characters", () => {
   );
   expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
     /^\*\*Global\*\*\n- \\\*Bins\\\* & \\`recycling\\`\n\n/,
+  );
+});
+
+test("Chore names that look like headings, quotes or links show literally", () => {
+  const house = createTestHouse();
+
+  house.run("Alice", {
+    name: "chore add",
+    choreName: "# Kitchen",
+    scope: "global",
+  });
+  house.run("Alice", {
+    name: "chore add",
+    choreName: "> [Bins](https://example.com)",
+    scope: "global",
+  });
+
+  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
+    /^\*\*Global\*\*\n- \\# Kitchen\n- \\> \\\[Bins\\\]\(https:\/\/example\.com\)\n\n/,
   );
 });

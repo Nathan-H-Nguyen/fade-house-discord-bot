@@ -37,9 +37,16 @@ export async function startBot(config: Config, house: House): Promise<Client> {
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   });
 
-  client.once(Events.ClientReady, (ready) => {
-    console.log(`Logged in as ${ready.user.tag}`);
+  const ready = new Promise<Client<true>>((resolve) => {
+    client.once(Events.ClientReady, resolve);
   });
+  await client.login(config.discordToken);
+  console.log(`Logged in as ${(await ready).user.tag}`);
+
+  // Load every member once; the Server Members intent keeps the cache current from then on,
+  // so commands read the roster without waiting on Discord before their reply deadline.
+  const guild = await client.guilds.fetch(config.guildId);
+  await guild.members.fetch();
 
   client.on(Events.InteractionCreate, (interaction) => {
     if (
@@ -63,7 +70,6 @@ export async function startBot(config: Config, house: House): Promise<Client> {
     });
   });
 
-  await client.login(config.discordToken);
   return client;
 }
 
@@ -81,7 +87,7 @@ async function handleCommand(
         interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ??
         false,
     },
-    roster: await fetchRoster(guild),
+    roster: rosterOf(guild),
     command: toCommand(interaction),
   });
 
@@ -92,9 +98,8 @@ async function handleCommand(
   });
 }
 
-async function fetchRoster(guild: Guild): Promise<Roster> {
-  const members = await guild.members.fetch();
-  return members.map((member) => ({
+function rosterOf(guild: Guild): Roster {
+  return guild.members.cache.map((member) => ({
     id: member.id,
     displayName: member.displayName,
     isBot: member.user.bot,
