@@ -20,3 +20,16 @@ test("in the test server /dev now and /dev advance-to are registered", () => {
   expect(names).toEqual(["ping", "chore", "dev"]);
   expect(subcommandsOf(true, "dev")).toEqual(["advance-to", "now"]);
 });
+
+test("/chore done takes an autocompleted Assignment, and /chore mine takes nothing", () => {
+  const chore = commandDefinitions({ isTestServer: false }).find(
+    (c) => c.name === "chore",
+  );
+  const subcommand = (name: string) =>
+    chore?.options?.find((option) => option.name === name);
+
+  expect(subcommand("mine")).toMatchObject({ options: [] });
+  expect(subcommand("done")).toMatchObject({
+    options: [{ name: "assignment", required: true, autocomplete: true }],
+  });
+});

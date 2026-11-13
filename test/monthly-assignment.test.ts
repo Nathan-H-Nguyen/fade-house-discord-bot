@@ -1,15 +1,15 @@
 import { describe, expect, test } from "vitest";
-import type { Member, Outbound, Scope } from "../src/house/index.ts";
-import { createTestHouse, roster, temporaryPath } from "./harness.ts";
-
-type TestHouse = ReturnType<typeof createTestHouse>;
+import type { Outbound, Scope } from "../src/house/index.ts";
+import {
+  createTestHouse,
+  membersNamed,
+  roster,
+  temporaryPath,
+  type TestHouse,
+} from "./harness.ts";
 
 /** Seeds to try where the outcome depends on how ties fall. */
 const seeds = Array.from({ length: 20 }, (_, i) => i + 1);
-
-function membersNamed(...names: string[]): Member[] {
-  return roster.filter((m) => names.includes(m.displayName));
-}
 
 const displayNames = new Map<string, string>(
   roster.map((m) => [m.id, m.displayName]),

@@ -219,7 +219,7 @@ async function handleAutocomplete(
   if (!guild) throw new Error("Autocomplete arrived without a cached guild");
 
   const focused = interaction.options.getFocused(true);
-  if (focused.name !== "chore") {
+  if (focused.name !== "chore" && focused.name !== "assignment") {
     // Answer anyway, so Discord shows an empty list rather than an error.
     console.error(
       `/${interaction.commandName} has no autocomplete for "${focused.name}"`,
@@ -230,7 +230,7 @@ async function handleAutocomplete(
   const suggestions = house.suggest({
     actor: actorOf(interaction),
     roster: rosterOf(guild),
-    field: { name: "chore", text: focused.value },
+    field: { name: focused.name, text: focused.value },
   });
 
   await interaction.respond(
@@ -291,6 +291,13 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
       };
     case "chore list":
       return { name: "chore list" };
+    case "chore mine":
+      return { name: "chore mine" };
+    case "chore done":
+      return {
+        name: "chore done",
+        choreName: interaction.options.getString("assignment", true),
+      };
     case "dev now":
       return { name: "dev now" };
     case "dev advance-to":

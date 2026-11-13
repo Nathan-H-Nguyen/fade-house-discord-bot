@@ -12,8 +12,12 @@ The vocabulary (Housemate, Chore, Scope, Assignment and so on) is defined in [GL
 | `/chore edit <chore> [name] [scope]` | Housemates | Renames a Chore or changes its Scope.                            |
 | `/chore retire <chore>`              | Housemates | Takes a Chore out of the pool, keeping its history.              |
 | `/chore list`                        | Housemates | Lists the active Chores grouped by Scope.                        |
+| `/chore mine`                        | Housemates | Lists your open Assignments, privately.                          |
+| `/chore done <assignment>`           | Housemates | Marks one of your open Assignments complete.                     |
 
 Edit and retire suggest active Chores as you type.
+Done suggests only your own open Assignments, and posts a short completion message in #chores.
+Completing someone else's Assignment, or one already complete, is refused privately.
 Active Chore names must be unique, ignoring case.
 Changes to the pool apply from the next monthly run and never alter existing Assignments.
 

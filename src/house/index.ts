@@ -15,12 +15,22 @@ import {
   updateChore,
   type Scope,
 } from "./chores.ts";
-import type { Random } from "./assignments.ts";
+import {
+  completeAssignment,
+  findAssignment,
+  openAssignmentsOf,
+  type Random,
+} from "./assignments.ts";
 import { backUp } from "./backup.ts";
-import { formatDateTime, houseCalendar, parseDateTime } from "./calendar.ts";
+import {
+  formatDateTime,
+  formatMonth,
+  houseCalendar,
+  parseDateTime,
+} from "./calendar.ts";
 import { openDatabase } from "./database.ts";
 import { resolveMember } from "./housemates.ts";
-import { escapeMarkdown } from "./markdown.ts";
+import { escapeMarkdown, mention } from "./markdown.ts";
 import { assignMonth } from "./monthly-run.ts";
 import { daily, monthly, runDueJobs, type Job } from "./scheduler.ts";
 
@@ -50,9 +60,12 @@ export type Command =
   | { name: "ping" }
   | { name: "chore add"; choreName: string; scope: Scope }
   | { name: "chore list" }
+  | { name: "chore mine" }
   /** `choreName` names an active Chore, picked by autocomplete or typed in any case. */
   | { name: "chore edit"; choreName: string; newName?: string; scope?: Scope }
   | { name: "chore retire"; choreName: string }
+  /** `choreName` names one of the caller's open Assignments by its Chore, picked by autocomplete or typed in any case. */
+  | { name: "chore done"; choreName: string }
   /** Test server only. */
   | { name: "dev now" }
   /** Test server only. `to` is a house time, as YYYY-MM-DD HH:MM. */
@@ -93,8 +106,14 @@ export interface CommandResult {
   outbound: Outbound[];
 }
 
-/** An option the caller is filling in, with the text typed so far. */
-export type SuggestionField = { name: "chore"; text: string };
+/**
+ * An option the caller is filling in, with the text typed so far:
+ * an active Chore, or one of the caller's open Assignments.
+ */
+export interface SuggestionField {
+  name: "chore" | "assignment";
+  text: string;
+}
 
 /** One autocomplete choice: what the Housemate sees, and what the command receives. */
 export interface Suggestion {
@@ -211,6 +230,11 @@ export function openHouse(options: {
     return `${formatDateTime(calendar.toLocal(now()))} (${options.timezone})`;
   }
 
+  /** The current month in the house timezone, as YYYY-MM. */
+  function currentMonth(): string {
+    return formatMonth(calendar.toLocal(now()));
+  }
+
   function noSuchChore(name: string): CommandResult {
     return reply(`There is no active Chore named ${escapeMarkdown(name)}.`);
   }
@@ -226,7 +250,14 @@ export function openHouse(options: {
     suggest({ actor, roster, field }) {
       if (resolveMember(roster, actor.memberId).kind !== "housemate") return [];
       const text = foldChoreName(field.text.trim());
-      return activeChores(db)
+      const options =
+        field.name === "chore"
+          ? activeChores(db)
+          : openAssignmentsOf(db, actor.memberId).map((a) => ({
+              name: a.choreName,
+              scope: a.choreScope,
+            }));
+      return options
         .filter((c) => foldChoreName(c.name).includes(text))
         .slice(0, maxSuggestions)
         .map((c) => {
@@ -363,6 +394,53 @@ export function openHouse(options: {
           return reply(
             `Retired ${escapeMarkdown(chore.name)}. It will not be handed out from next month.`,
           );
+        }
+
+        case "chore mine": {
+          const open = openAssignmentsOf(db, actor.memberId);
+          if (open.length === 0) return reply("You have no open Assignments.");
+          return reply(
+            [
+              "Your open Assignments:",
+              ...open.map(
+                (a) =>
+                  `- ${escapeMarkdown(a.choreName)} (${scopeLabels[a.choreScope]})`,
+              ),
+            ].join("\n"),
+          );
+        }
+
+        case "chore done": {
+          const choreName = command.choreName.trim();
+          const assignment = findAssignment(db, {
+            memberId: actor.memberId,
+            choreName,
+            month: currentMonth(),
+          });
+          if (!assignment) {
+            return reply(
+              `You have no open Assignment named ${escapeMarkdown(choreName)}.`,
+            );
+          }
+          const name = escapeMarkdown(assignment.choreName);
+          if (assignment.memberId !== actor.memberId) {
+            return reply(
+              `${name} is ${mention(assignment.memberId)}'s Assignment, not yours.`,
+            );
+          }
+          if (assignment.completed) {
+            return reply(`You have already completed ${name}.`);
+          }
+          completeAssignment(db, assignment.id, now());
+          return {
+            reply: { content: `Completed ${name}.`, private: true },
+            outbound: [
+              {
+                channel: "chores",
+                content: `${mention(actor.memberId)} completed ${name}.`,
+              },
+            ],
+          };
         }
       }
     },

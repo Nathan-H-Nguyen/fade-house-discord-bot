@@ -37,6 +37,11 @@ export const roster = [
 
 type MemberName = (typeof roster)[number]["displayName"];
 
+/** The roster fixture's members with the given display names. */
+export function membersNamed(...names: MemberName[]): Member[] {
+  return roster.filter((m) => (names as string[]).includes(m.displayName));
+}
+
 function actorOf(as: MemberName, isAdmin = false): Actor {
   const member = roster.find((m) => m.displayName === as);
   if (!member) throw new Error(`No member named ${as} in the roster fixture`);
@@ -80,6 +85,8 @@ export function temporaryPath(name: string): string {
   });
   return join(dir, name);
 }
+
+export type TestHouse = ReturnType<typeof createTestHouse>;
 
 /**
  * Opens a House on the roster fixture, with a fake Clock, in the America/Los_Angeles timezone.

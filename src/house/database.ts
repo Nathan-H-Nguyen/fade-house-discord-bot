@@ -38,6 +38,8 @@ const migrations: readonly string[] = [
     housemate_id TEXT NOT NULL,
     UNIQUE (month, chore_id)
   ) STRICT`,
+  // When the Housemate completed the Assignment, or null while it is open.
+  `ALTER TABLE assignments ADD COLUMN completed_at TEXT`,
 ];
 
 /** Opens the database at `path` (or `:memory:`) and brings its schema up to date. */

@@ -15,7 +15,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("chore")
-    .setDescription("Manage the Chore pool")
+    .setDescription("Manage the Chore pool and your Assignments")
     .addSubcommand((sub) =>
       sub
         .setName("add")
@@ -75,6 +75,22 @@ const commands = [
     )
     .addSubcommand((sub) =>
       sub.setName("list").setDescription("List the active Chores by Scope"),
+    )
+    .addSubcommand((sub) =>
+      sub.setName("mine").setDescription("List your open Assignments"),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("done")
+        .setDescription("Mark one of your Assignments complete")
+        .addStringOption((option) =>
+          option
+            .setName("assignment")
+            .setDescription("The Assignment you completed")
+            .setRequired(true)
+            .setMaxLength(maxChoreNameLength)
+            .setAutocomplete(true),
+        ),
     ),
 ];
 

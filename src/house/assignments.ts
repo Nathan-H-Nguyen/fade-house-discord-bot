@@ -1,5 +1,10 @@
 import type Database from "better-sqlite3";
-import type { Chore, StoredChore } from "./chores.ts";
+import {
+  sameChoreName,
+  type Chore,
+  type Scope,
+  type StoredChore,
+} from "./chores.ts";
 import type { Housemate } from "./housemates.ts";
 
 /** One Chore given to one Housemate for one month. */
@@ -146,4 +151,89 @@ export function assigneesIn(
     )
     .all(month);
   return new Map(rows.map((row) => [row.chore_id, row.housemate_id]));
+}
+
+/** An Assignment as stored, with its Chore's name and Scope as they were when it was given. */
+export interface StoredAssignment {
+  id: number;
+  /** YYYY-MM */
+  month: string;
+  choreName: string;
+  choreScope: Scope;
+  memberId: string;
+  completed: boolean;
+}
+
+type AssignmentRow = Omit<StoredAssignment, "completed"> & {
+  completed: 0 | 1;
+};
+
+/** Selects Assignments that match `where`, oldest month first. */
+function selectAssignments(
+  db: Database.Database,
+  where: string,
+  ...params: string[]
+): StoredAssignment[] {
+  return db
+    .prepare<string[], AssignmentRow>(
+      `SELECT id, month, chore_name AS choreName, chore_scope AS choreScope,
+        housemate_id AS memberId, completed_at IS NOT NULL AS completed
+      FROM assignments
+      WHERE ${where}
+      ORDER BY month, chore_name COLLATE NOCASE, id`,
+    )
+    .all(...params)
+    .map((row) => ({ ...row, completed: row.completed === 1 }));
+}
+
+/** A Housemate's open Assignments, from any month, oldest month first. */
+export function openAssignmentsOf(
+  db: Database.Database,
+  memberId: string,
+): StoredAssignment[] {
+  return selectAssignments(
+    db,
+    "housemate_id = ? AND completed_at IS NULL",
+    memberId,
+  );
+}
+
+/**
+ * The Assignment a Housemate means by a Chore name, ignoring case.
+ * That is their own oldest open Assignment of that name if they have one.
+ * Otherwise it is the latest one that is either open or given in `month`, whoever holds it,
+ * so the refusal can say who holds it or that it is already complete.
+ */
+export function findAssignment(
+  db: Database.Database,
+  {
+    memberId,
+    choreName,
+    month,
+  }: {
+    memberId: string;
+    choreName: string;
+    /** The current month, YYYY-MM. */
+    month: string;
+  },
+): StoredAssignment | undefined {
+  const named = selectAssignments(
+    db,
+    "completed_at IS NULL OR month = ?",
+    month,
+  ).filter((a) => sameChoreName(a.choreName, choreName));
+  return (
+    named.find((a) => a.memberId === memberId && !a.completed) ?? named.at(-1)
+  );
+}
+
+/** Marks an open Assignment complete. */
+export function completeAssignment(
+  db: Database.Database,
+  id: number,
+  completedAt: Date,
+): void {
+  db.prepare(
+    "UPDATE assignments SET completed_at = ? WHERE id = ? AND completed_at IS NULL",
+  ).run(completedAt.toISOString(), id);
 }

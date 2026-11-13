@@ -19,12 +19,7 @@ import {
 } from "./chores.ts";
 import { housematesIn } from "./housemates.ts";
 import type { Outbound, Post, Roster } from "./index.ts";
-import { escapeMarkdown } from "./markdown.ts";
-
-/** Shows a member by mention, which Discord renders as their current name. */
-function mention(memberId: string): string {
-  return `<@${memberId}>`;
-}
+import { escapeMarkdown, mention } from "./markdown.ts";
 
 function choreLines(chores: readonly StoredChore[]): string[] {
   return [...chores]
