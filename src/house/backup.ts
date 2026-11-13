@@ -2,7 +2,7 @@ import type Database from "better-sqlite3";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Outbound } from "./index.ts";
+import type { Post } from "./index.ts";
 
 /**
  * Takes a consistent snapshot of the database through SQLite's online backup API,
@@ -33,7 +33,7 @@ export async function backUp(
   db: Database.Database,
   date: string,
   limitBytes: number,
-): Promise<Outbound> {
+): Promise<Post> {
   const byHand = `See "Backups" in the README to take one by hand.`;
 
   let data: Uint8Array;

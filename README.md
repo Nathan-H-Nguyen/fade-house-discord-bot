@@ -22,13 +22,31 @@ Anyone else gets a private refusal explaining why.
 
 ## Scheduled jobs
 
-| Job    | When                    | What it does                                                  |
-| ------ | ----------------------- | ------------------------------------------------------------- |
-| Backup | Daily, 03:00 house time | Posts a snapshot of the database in #bot-admin (see Backups). |
+| Job                | When                      | What it does                                                         |
+| ------------------ | ------------------------- | -------------------------------------------------------------------- |
+| Monthly assignment | The 1st, 00:05 house time | Hands out every active Chore for the month (see Monthly assignment). |
+| Backup             | Daily, 03:00 house time   | Posts a snapshot of the database in #bot-admin (see Backups).        |
 
 The bot checks for due jobs when it starts and about once a minute.
-Each job runs at most once per day, even across restarts.
-If the bot was off when a job was due, the job runs once when it comes back, for the current day only: missed earlier days are not made up.
+Each job runs at most once per day (or month, for the monthly assignment), even across restarts.
+If the bot was off when a job was due, the job runs once when it comes back, for the current day or month only: missed earlier ones are not made up.
+A new database, or a newly added job, waits for the job's next time rather than running for a day or month already under way.
+So the first monthly assignment is on the 1st after the bot first starts.
+
+## Monthly assignment
+
+At 00:05 on the 1st, every active Chore is given to one eligible Housemate for the month.
+Global Chores can go to anyone; Floor 1 and Floor 3 Chores go only to Housemates on that Floor.
+
+- Balancing counts each Housemate's Assignments across all Scopes, so Floor 1's Housemates, who share their Floor's Chores between fewer people, take fewer Global Chores.
+- Nobody gets the same Chore two months running unless no one else is eligible for it.
+- Ties are broken at random.
+- A Chore whose Scope has no Housemates is not assigned, and the post lists it.
+
+The bot posts the month's Assignments in #chores, grouped by Housemate, and DMs each Housemate their own.
+If a DM cannot be delivered (for example, the Housemate does not accept DMs from server members), the bot says so in #chores.
+A member with both floor roles is left out and reported in #bot-admin.
+Mentions in these messages show who is meant without notifying them.
 
 ## Backups
 
@@ -121,7 +139,7 @@ With `IS_TEST_SERVER=true`, the bot registers two extra commands for walking thr
 The bot's time keeps running from where it was moved to, and only moves forward.
 It goes back to the real time when the bot restarts.
 Jobs that ran for days you moved past are then skipped when those days really arrive, so use a throwaway database for the walk-through.
-For example, `/dev advance-to 2026-11-13 03:00` posts that day's backup in #bot-admin.
+For example, `/dev advance-to 2026-11-13 03:00` posts that day's backup in #bot-admin, and `/dev advance-to 2026-12-01 00:05` hands out December's Chores.
 Outside the test server these commands are not registered, and the House refuses them.
 
 CI runs the typecheck, lint and tests on every push and pull request.
@@ -132,4 +150,4 @@ The Discord adapter (`src/discord/`) is a thin translation layer around it and i
 
 Tests drive only the House core, through `test/harness.ts`: an in-memory SQLite database, a fake Clock, and a roster of two Floor 1 and four Floor 3 Housemates plus members who are not Housemates.
 They never inspect database rows or call internal modules, so the internals can change freely.
-The one exception is `test/commands.test.ts`, which checks that the `/dev` commands are registered only in the test server.
+The exceptions are `test/commands.test.ts`, which checks that the `/dev` commands are registered only in the test server, and `test/messages.test.ts`, which checks how long messages are split to fit Discord's limit.

@@ -17,10 +17,12 @@ import {
   type Command,
   type House,
   type Outbound,
+  type Post,
   type Roster,
   type Scope,
 } from "../house/index.ts";
 import { commandDefinitions } from "./commands.ts";
+import { splitMessage } from "./messages.ts";
 
 /** Replaces the slash commands in the configured guild, where changes apply immediately. */
 export async function registerCommands(config: Config): Promise<void> {
@@ -88,7 +90,7 @@ export async function startBot(config: Config, house: House): Promise<Bot> {
 
   function tick(): void {
     house
-      .tick()
+      .tick(rosterOf(guild))
       .then(deliver)
       .catch((error: unknown) => {
         console.error("Scheduled jobs failed", error);
@@ -105,44 +107,71 @@ export async function startBot(config: Config, house: House): Promise<Bot> {
   };
 }
 
-/** Posts the House's outbound messages in their channels, in order. */
+/**
+ * Delivers the House's outbound messages in order: posts in their channels, and DMs to members.
+ * A message too long for Discord is sent in parts, with any attachment on the last.
+ * Mentions show who is meant without notifying them.
+ */
 function deliverTo(
   client: Client,
   config: Config,
 ): (messages: readonly Outbound[]) => Promise<void> {
-  const channelIds: Record<Outbound["channel"], string> = {
+  const channelIds: Record<Post["channel"], string> = {
+    chores: config.choresChannelId,
     admin: config.adminChannelId,
   };
 
+  async function post(message: Post): Promise<void> {
+    const channelId = channelIds[message.channel];
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isSendable()) {
+      throw new Error(`Cannot post in channel ${channelId}`);
+    }
+    const parts = splitMessage(message.content);
+    const last = parts.pop() ?? "";
+    for (const part of parts) {
+      await channel.send({ content: part, allowedMentions: { parse: [] } });
+    }
+    const { attachment } = message;
+    try {
+      await channel.send({
+        content: last,
+        allowedMentions: { parse: [] },
+        files: attachment
+          ? [
+              {
+                attachment: Buffer.from(attachment.data),
+                name: attachment.name,
+              },
+            ]
+          : [],
+      });
+    } catch (error) {
+      if (!attachment) throw error;
+      // The House has already recorded the job as done, so a refused upload must not vanish silently.
+      const reason = error instanceof Error ? error.message : String(error);
+      await channel.send({
+        content: `${last}\nDiscord refused the attachment ${attachment.name}: ${reason}`,
+        allowedMentions: { parse: [] },
+      });
+    }
+  }
+
   return async (messages) => {
     for (const message of messages) {
-      const channelId = channelIds[message.channel];
-      const channel = await client.channels.fetch(channelId);
-      if (!channel?.isSendable()) {
-        throw new Error(`Cannot post in channel ${channelId}`);
+      if ("channel" in message) {
+        await post(message);
+        continue;
       }
-      const { attachment } = message;
       try {
-        await channel.send({
-          content: message.content,
-          allowedMentions: { parse: [] },
-          files: attachment
-            ? [
-                {
-                  attachment: Buffer.from(attachment.data),
-                  name: attachment.name,
-                },
-              ]
-            : [],
-        });
+        const user = await client.users.fetch(message.memberId);
+        for (const part of splitMessage(message.content)) {
+          await user.send({ content: part, allowedMentions: { parse: [] } });
+        }
       } catch (error) {
-        if (!attachment) throw error;
-        // The House has already recorded the job as done, so a refused upload must not vanish silently.
-        const reason = error instanceof Error ? error.message : String(error);
-        await channel.send({
-          content: `${message.content}\nDiscord refused the attachment ${attachment.name}: ${reason}`,
-          allowedMentions: { parse: [] },
-        });
+        // Most often the member does not accept DMs from server members.
+        console.error(`Could not DM member ${message.memberId}`, error);
+        await post(message.ifUndelivered);
       }
     }
   };

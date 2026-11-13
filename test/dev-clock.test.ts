@@ -19,7 +19,7 @@ test("/dev now shows the bot's time in house time", async () => {
 });
 
 test("outside the test server the /dev commands are refused and leave the clock alone", async () => {
-  const house = createTestHouse({ now: "2026-11-12T10:00:00-08:00" });
+  const house = createTestHouse({ now: "2026-11-12T03:00:00-08:00" });
 
   const now = await house.run("Alice", { name: "dev now" });
   const advanced = await house.run("Alice", {

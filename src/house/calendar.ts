@@ -105,3 +105,29 @@ export function parseDateTime(text: string): LocalDateTime | undefined {
     .map(Number);
   return { year, month, day, hour, minute };
 }
+
+/** A calendar month in the house timezone. */
+export type Month = Pick<LocalDate, "year" | "month">;
+
+/** The calendar month before `month`. */
+export function previousMonth({ year, month }: Month): Month {
+  return month === 1
+    ? { year: year - 1, month: 12 }
+    : { year, month: month - 1 };
+}
+
+/** Formats a month as YYYY-MM. */
+export function formatMonth(month: Month): string {
+  return `${pad(month.year, 4)}-${pad(month.month)}`;
+}
+
+const monthNames = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
+  month: "long",
+  year: "numeric",
+});
+
+/** Names a month as Housemates read it, such as "December 2026". */
+export function nameMonth(month: Month): string {
+  return monthNames.format(new Date(Date.UTC(month.year, month.month - 1, 1)));
+}

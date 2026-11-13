@@ -8,6 +8,7 @@ import {
   type Clock,
   type Command,
   type Member,
+  type Roster,
   type SuggestionField,
 } from "../src/house/index.ts";
 
@@ -59,6 +60,18 @@ class FakeClock implements Clock {
   }
 }
 
+/** A seeded source of randomness (mulberry32), so a test hands out Chores the same way every run. */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** A path in a fresh directory that is removed when the current test finishes. */
 export function temporaryPath(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), "fade-house-"));
@@ -73,17 +86,20 @@ export function temporaryPath(name: string): string {
  * It runs as the production server, without the `/dev` commands, unless a test says otherwise.
  * The database is in memory unless a test needs one that outlives the House.
  * Times are ISO 8601 strings with an offset, such as "2026-11-12T03:00:00-08:00".
+ * Chores are handed out with randomness from `seed`, so tests that check fairness should try several.
  */
 export function createTestHouse({
   databasePath = ":memory:",
   now = "2026-11-12T10:00:00-08:00",
   attachmentLimitBytes = 10 * 1024 * 1024,
   isTestServer = false,
+  seed = 1,
 }: {
   databasePath?: string;
   now?: string;
   attachmentLimitBytes?: number;
   isTestServer?: boolean;
+  seed?: number;
 } = {}) {
   const clock = new FakeClock(new Date(now));
   const house = openHouse({
@@ -92,6 +108,7 @@ export function createTestHouse({
     timezone: "America/Los_Angeles",
     attachmentLimitBytes,
     isTestServer,
+    random: seededRandom(seed),
   });
 
   return {
@@ -104,9 +121,9 @@ export function createTestHouse({
       clock.set(new Date(time));
     },
 
-    /** Runs any scheduled jobs that are due, as the bot does every minute. */
-    tick() {
-      return house.tick();
+    /** Runs any scheduled jobs that are due, as the bot does every minute, with the roster fixture unless given another. */
+    tick({ members = roster }: { members?: Roster } = {}) {
+      return house.tick(members);
     },
 
     /** Runs a slash command as the named member, who is not an Admin unless stated. */
