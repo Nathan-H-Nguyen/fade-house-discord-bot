@@ -6,6 +6,7 @@ import {
   previousDay,
   previousMonth,
   type LocalDateTime,
+  type Month,
 } from "./calendar.ts";
 import type { Outbound, Roster } from "./index.ts";
 
@@ -45,15 +46,28 @@ export function daily(hour: number, minute: number): Job["currentPeriod"] {
   };
 }
 
-/** Periods of one month, each starting on the 1st at `hour`:`minute` and named by its month. */
-export function monthly(hour: number, minute: number): Job["currentPeriod"] {
+/**
+ * Periods of one month, each starting at `hour`:`minute` on the day `dayOf` picks, the 1st unless given,
+ * and named by its month.
+ */
+export function monthly(
+  hour: number,
+  minute: number,
+  dayOf: (month: Month) => number = () => 1,
+): Job["currentPeriod"] {
+  const start = (month: Month): LocalDateTime => ({
+    year: month.year,
+    month: month.month,
+    day: dayOf(month),
+    hour,
+    minute,
+  });
   return (now) => {
-    const started = now.day > 1 || startedBy(now, hour, minute);
+    const day = dayOf(now);
+    const started =
+      now.day > day || (now.day === day && startedBy(now, hour, minute));
     const month = started ? now : previousMonth(now);
-    return {
-      key: formatMonth(month),
-      start: { year: month.year, month: month.month, day: 1, hour, minute },
-    };
+    return { key: formatMonth(month), start: start(month) };
   };
 }
 

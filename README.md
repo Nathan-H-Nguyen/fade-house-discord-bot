@@ -26,13 +26,14 @@ Anyone else gets a private refusal explaining why.
 
 ## Scheduled jobs
 
-| Job                | When                      | What it does                                                                                   |
-| ------------------ | ------------------------- | ---------------------------------------------------------------------------------------------- |
-| Monthly assignment | The 1st, 00:05 house time | Summarises the month just ended and hands out the new month's Chores (see Monthly assignment). |
-| Backup             | Daily, 03:00 house time   | Posts a snapshot of the database in #bot-admin (see Backups).                                  |
+| Job                | When                                                      | What it does                                                                                   |
+| ------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Monthly assignment | The 1st, 00:05 house time                                 | Summarises the month just ended and hands out the new month's Chores (see Monthly assignment). |
+| Chore reminder     | 09:00 house time, 7 days before the last day of the month | DMs each Housemate their open Assignments (see Chore reminder).                                |
+| Backup             | Daily, 03:00 house time                                   | Posts a snapshot of the database in #bot-admin (see Backups).                                  |
 
 The bot checks for due jobs when it starts and about once a minute.
-Each job runs at most once per day (or month, for the monthly assignment), even across restarts.
+Each job runs at most once per day (or month, for the monthly assignment and Chore reminder), even across restarts.
 If the bot was off when a job was due, the job runs once when it comes back, for the current day or month only: missed earlier ones are not made up.
 A new database, or a newly added job, waits for the job's next time rather than running for a day or month already under way.
 So the first monthly assignment is on the 1st after the bot first starts.
@@ -62,6 +63,14 @@ The bot posts the month's Assignments in #chores, grouped by Housemate, and DMs 
 If a DM cannot be delivered (for example, the Housemate does not accept DMs from server members), the bot says so in #chores.
 A member with both floor roles gets no new Chores and is reported in #bot-admin, but keeps their Overdue Assignments, which are still posted and DMed.
 Mentions in these messages show who is meant without notifying them.
+
+## Chore reminder
+
+At 09:00 house time seven days before the last day of the month (the 21st in a 28-day February, the 24th in a 31-day month), the bot DMs each Housemate with open Assignments a list of them, with Overdue Assignments marked.
+Housemates with nothing open get nothing, and so do members who have left.
+A member with both floor roles is reminded of the Assignments they keep.
+If a DM cannot be delivered, the bot posts the list in #chores instead, saying the DM failed.
+If the bot is off from before the reminder time until the month has ended, that month's reminder is skipped.
 
 ## Backups
 

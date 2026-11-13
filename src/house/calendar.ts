@@ -116,6 +116,11 @@ export function previousMonth({ year, month }: Month): Month {
     : { year, month: month - 1 };
 }
 
+/** The last day of `month`, such as 28 for February 2027. */
+export function lastDay({ year, month }: Month): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
 /** Formats a month as YYYY-MM. */
 export function formatMonth(month: Month): string {
   return `${pad(month.year, 4)}-${pad(month.month)}`;
