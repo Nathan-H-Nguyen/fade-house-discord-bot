@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { onTestFinished } from "vitest";
 import {
   openHouse,
   type Actor,
@@ -38,9 +42,9 @@ function actorOf(as: MemberName, isAdmin = false): Actor {
   return { memberId: member.id, isAdmin };
 }
 
-/** A Clock that stays at the time it was given, so tests decide what "now" is. */
+/** A Clock that stays at the time it was last set to, so tests decide what "now" is. */
 class FakeClock implements Clock {
-  private readonly current: Date;
+  private current: Date;
 
   constructor(start: Date) {
     this.current = new Date(start);
@@ -49,19 +53,60 @@ class FakeClock implements Clock {
   now(): Date {
     return new Date(this.current);
   }
+
+  set(time: Date): void {
+    this.current = new Date(time);
+  }
+}
+
+/** A path in a fresh directory that is removed when the current test finishes. */
+export function temporaryPath(name: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "fade-house-"));
+  onTestFinished(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+  return join(dir, name);
 }
 
 /**
- * Opens a House on the roster fixture, with a fake Clock.
+ * Opens a House on the roster fixture, with a fake Clock, in the America/Los_Angeles timezone.
+ * It runs as the production server, without the `/dev` commands, unless a test says otherwise.
  * The database is in memory unless a test needs one that outlives the House.
+ * Times are ISO 8601 strings with an offset, such as "2026-11-12T03:00:00-08:00".
  */
-export function createTestHouse({ databasePath = ":memory:" } = {}) {
-  const clock = new FakeClock(new Date("2026-11-12T18:00:00Z"));
-  const house = openHouse({ databasePath, clock });
+export function createTestHouse({
+  databasePath = ":memory:",
+  now = "2026-11-12T10:00:00-08:00",
+  attachmentLimitBytes = 10 * 1024 * 1024,
+  isTestServer = false,
+}: {
+  databasePath?: string;
+  now?: string;
+  attachmentLimitBytes?: number;
+  isTestServer?: boolean;
+} = {}) {
+  const clock = new FakeClock(new Date(now));
+  const house = openHouse({
+    databasePath,
+    clock,
+    timezone: "America/Los_Angeles",
+    attachmentLimitBytes,
+    isTestServer,
+  });
 
   return {
     close() {
-      house.close();
+      return house.close();
+    },
+
+    /** Moves the Clock to a new time without ticking, as if the bot had been asleep. */
+    setTime(time: string) {
+      clock.set(new Date(time));
+    },
+
+    /** Runs any scheduled jobs that are due, as the bot does every minute. */
+    tick() {
+      return house.tick();
     },
 
     /** Runs a slash command as the named member, who is not an Admin unless stated. */

@@ -15,9 +15,12 @@ import {
   updateChore,
   type Scope,
 } from "./chores.ts";
+import { backUp } from "./backup.ts";
+import { formatDateTime, houseCalendar, parseDateTime } from "./calendar.ts";
 import { openDatabase } from "./database.ts";
 import { resolveMember } from "./housemates.ts";
 import { escapeMarkdown } from "./markdown.ts";
+import { runDueJobs, type DailyJob } from "./scheduler.ts";
 
 export { maxChoreNameLength, scopes, scopeLabels, type Scope };
 
@@ -47,7 +50,11 @@ export type Command =
   | { name: "chore list" }
   /** `choreName` names an active Chore, picked by autocomplete or typed in any case. */
   | { name: "chore edit"; choreName: string; newName?: string; scope?: Scope }
-  | { name: "chore retire"; choreName: string };
+  | { name: "chore retire"; choreName: string }
+  /** Test server only. */
+  | { name: "dev now" }
+  /** Test server only. `to` is a house time, as YYYY-MM-DD HH:MM. */
+  | { name: "dev advance-to"; to: string };
 
 export interface Reply {
   content: string;
@@ -55,8 +62,18 @@ export interface Reply {
   private: boolean;
 }
 
-/** A message the caller must deliver beyond the reply. None exist yet. */
-export type Outbound = never;
+/** A file sent along with a message. */
+export interface Attachment {
+  name: string;
+  data: Uint8Array;
+}
+
+/** A message the caller must deliver beyond the reply: a post in #bot-admin. */
+export interface Outbound {
+  channel: "admin";
+  content: string;
+  attachment?: Attachment;
+}
 
 export interface CommandResult {
   reply: Reply;
@@ -84,22 +101,61 @@ export interface House {
     actor: Actor;
     roster: Roster;
     command: Command;
-  }): CommandResult;
+  }): Promise<CommandResult>;
   /** Suggests values for an option as the member types it. Non-Housemates get none. */
   suggest(call: {
     actor: Actor;
     roster: Roster;
     field: SuggestionField;
   }): Suggestion[];
-  /** Closes the database. The House must not be used afterwards. */
-  close(): void;
+  /** Runs any scheduled jobs that are due, returning the messages they send. */
+  tick(): Promise<Outbound[]>;
+  /** Waits for any tick in progress, then closes the database. The House must not be used afterwards. */
+  close(): Promise<void>;
 }
 
 export function openHouse(options: {
   databasePath: string;
   clock: Clock;
+  /** IANA name of the house timezone, which defines job times. */
+  timezone: string;
+  /** The largest file Discord accepts as an attachment, which caps the size of a posted backup. */
+  attachmentLimitBytes: number;
+  /** Whether the bot is running in the test server, which enables the `/dev` commands. */
+  isTestServer: boolean;
 }): House {
   const db = openDatabase(options.databasePath);
+  const calendar = houseCalendar(options.timezone);
+
+  // How far `/dev advance-to` has moved the bot's time past the Clock. It resets on restart.
+  let devOffsetMs = 0;
+
+  function now(): Date {
+    return new Date(options.clock.now().getTime() + devOffsetMs);
+  }
+
+  const jobs: DailyJob[] = [
+    {
+      name: "backup",
+      hour: 3,
+      minute: 0,
+      run: async (date) => [
+        await backUp(db, date, options.attachmentLimitBytes),
+      ],
+    },
+  ];
+
+  // Ticks run one after another, so no job starts again while a run of it is still in progress.
+  let ticking: Promise<unknown> = Promise.resolve();
+
+  function tick(): Promise<Outbound[]> {
+    const next = ticking.then(() => {
+      const at = now();
+      return runDueJobs(db, jobs, calendar.toLocal(at), at);
+    });
+    ticking = next.catch(() => undefined);
+    return next;
+  }
 
   function reply(content: string): CommandResult {
     return { reply: { content, private: true }, outbound: [] };
@@ -128,14 +184,22 @@ export function openHouse(options: {
     return undefined;
   }
 
+  /** The bot's time, as the house sees it. */
+  function describeNow(): string {
+    return `${formatDateTime(calendar.toLocal(now()))} (${options.timezone})`;
+  }
+
   function noSuchChore(name: string): CommandResult {
     return reply(`There is no active Chore named ${escapeMarkdown(name)}.`);
   }
 
   return {
-    close() {
+    async close() {
+      await ticking;
       db.close();
     },
+
+    tick,
 
     suggest({ actor, roster, field }) {
       if (resolveMember(roster, actor.memberId).kind !== "housemate") return [];
@@ -152,9 +216,47 @@ export function openHouse(options: {
         });
     },
 
-    handle({ actor, roster, command }) {
+    async handle({ actor, roster, command }) {
       if (command.name === "ping")
         return reply("Pong! Fade House bot is connected.");
+
+      if (command.name === "dev now" || command.name === "dev advance-to") {
+        if (!options.isTestServer) {
+          return reply("The /dev commands only work in the test server.");
+        }
+        if (command.name === "dev now") {
+          return reply(`The bot's time is ${describeNow()}.`);
+        }
+        const to = parseDateTime(command.to);
+        if (!to) {
+          return reply(
+            "Give the time as YYYY-MM-DD HH:MM, such as 2026-11-27 09:00.",
+          );
+        }
+        const target = calendar.fromLocal(to);
+        if (!target) {
+          return reply(
+            `${formatDateTime(to)} is not a time in ${options.timezone}.`,
+          );
+        }
+        // Jobs already run for later periods would not run again, so time never goes back.
+        // Times are given to the minute, so the current minute counts as now.
+        const current = now().getTime();
+        if (target.getTime() < current - (current % 60_000)) {
+          return reply(
+            `The bot's time only moves forward, and it is already ${describeNow()}.`,
+          );
+        }
+        devOffsetMs = target.getTime() - options.clock.now().getTime();
+        const outbound = await tick();
+        return {
+          reply: {
+            content: `Moved the bot's time to ${describeNow()}.`,
+            private: true,
+          },
+          outbound,
+        };
+      }
 
       const resolution = resolveMember(roster, actor.memberId);
       switch (resolution.kind) {
@@ -176,7 +278,7 @@ export function openHouse(options: {
           const name = command.choreName.trim();
           const invalid = invalidName(name);
           if (invalid) return invalid;
-          addChore(db, { name, scope: command.scope }, options.clock.now());
+          addChore(db, { name, scope: command.scope }, now());
           return reply(
             `Added ${escapeMarkdown(name)} to the ${scopeLabels[command.scope]} Chores.`,
           );

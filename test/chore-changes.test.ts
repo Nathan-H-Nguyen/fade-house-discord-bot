@@ -1,16 +1,20 @@
 import { expect, test } from "vitest";
 import { createTestHouse } from "./harness.ts";
 
-test("a Housemate retires a Chore and it leaves the list", () => {
+test("a Housemate retires a Chore and it leaves the list", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
-  house.run("Alice", { name: "chore add", choreName: "Bins", scope: "global" });
+  await house.run("Alice", {
+    name: "chore add",
+    choreName: "Bins",
+    scope: "global",
+  });
 
-  const retired = house.run("Dan", {
+  const retired = await house.run("Dan", {
     name: "chore retire",
     choreName: "Kitchen",
   });
@@ -22,20 +26,20 @@ test("a Housemate retires a Chore and it leaves the list", () => {
     },
     outbound: [],
   });
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
-    /^\*\*Global\*\*\n- Bins\n\n/,
-  );
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toMatch(/^\*\*Global\*\*\n- Bins\n\n/);
 });
 
-test("a typed Chore name matches regardless of case", () => {
+test("a typed Chore name matches regardless of case", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
 
-  const retired = house.run("Dan", {
+  const retired = await house.run("Dan", {
     name: "chore retire",
     choreName: "kITCHEN",
   });
@@ -45,20 +49,20 @@ test("a typed Chore name matches regardless of case", () => {
   );
 });
 
-test("retiring a Chore that is not in the pool is refused", () => {
+test("retiring a Chore that is not in the pool is refused", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
-  house.run("Alice", { name: "chore retire", choreName: "Kitchen" });
+  await house.run("Alice", { name: "chore retire", choreName: "Kitchen" });
 
-  const again = house.run("Ben", {
+  const again = await house.run("Ben", {
     name: "chore retire",
     choreName: "Kitchen",
   });
-  const unknown = house.run("Ben", {
+  const unknown = await house.run("Ben", {
     name: "chore retire",
     choreName: "*Bins*",
   });
@@ -72,15 +76,15 @@ test("retiring a Chore that is not in the pool is refused", () => {
   );
 });
 
-test("a Housemate renames a Chore", () => {
+test("a Housemate renames a Chore", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "floor-1",
   });
 
-  const edited = house.run("Ben", {
+  const edited = await house.run("Ben", {
     name: "chore edit",
     choreName: "Kitchen",
     newName: "Floor 1 kitchen",
@@ -90,27 +94,27 @@ test("a Housemate renames a Chore", () => {
     reply: { content: "Renamed Kitchen to Floor 1 kitchen.", private: true },
     outbound: [],
   });
-  expect(house.run("Ben", { name: "chore list" }).reply.content).toContain(
-    "**Floor 1**\n- Floor 1 kitchen\n\n",
-  );
+  expect(
+    (await house.run("Ben", { name: "chore list" })).reply.content,
+  ).toContain("**Floor 1**\n- Floor 1 kitchen\n\n");
 });
 
-test("a Housemate moves a Chore to another Scope", () => {
+test("a Housemate moves a Chore to another Scope", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Bathroom",
     scope: "global",
   });
 
-  const edited = house.run("Chloe", {
+  const edited = await house.run("Chloe", {
     name: "chore edit",
     choreName: "Bathroom",
     scope: "floor-3",
   });
 
   expect(edited.reply.content).toBe("Moved Bathroom to the Floor 3 Chores.");
-  expect(house.run("Chloe", { name: "chore list" }).reply.content).toBe(
+  expect((await house.run("Chloe", { name: "chore list" })).reply.content).toBe(
     [
       "**Global**",
       "None",
@@ -124,15 +128,15 @@ test("a Housemate moves a Chore to another Scope", () => {
   );
 });
 
-test("a Housemate renames and moves a Chore at once", () => {
+test("a Housemate renames and moves a Chore at once", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Bathroom",
     scope: "global",
   });
 
-  const edited = house.run("Alice", {
+  const edited = await house.run("Alice", {
     name: "chore edit",
     choreName: "Bathroom",
     newName: "Floor 1 bathroom",
@@ -142,24 +146,24 @@ test("a Housemate renames and moves a Chore at once", () => {
   expect(edited.reply.content).toBe(
     "Renamed Bathroom to Floor 1 bathroom and moved it to the Floor 1 Chores.",
   );
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toContain(
-    "**Floor 1**\n- Floor 1 bathroom\n\n",
-  );
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toContain("**Floor 1**\n- Floor 1 bathroom\n\n");
 });
 
-test("an edit that changes nothing is refused", () => {
+test("an edit that changes nothing is refused", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
 
-  const empty = house.run("Alice", {
+  const empty = await house.run("Alice", {
     name: "chore edit",
     choreName: "Kitchen",
   });
-  const same = house.run("Alice", {
+  const same = await house.run("Alice", {
     name: "chore edit",
     choreName: "kitchen",
     newName: "Kitchen",
@@ -173,25 +177,25 @@ test("an edit that changes nothing is refused", () => {
   expect(same.reply.content).toBe("Kitchen already has that name and Scope.");
 });
 
-test("a new name is trimmed, and a blank or overlong one is refused", () => {
+test("a new name is trimmed, and a blank or overlong one is refused", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
 
-  const blank = house.run("Alice", {
+  const blank = await house.run("Alice", {
     name: "chore edit",
     choreName: "Kitchen",
     newName: "   ",
   });
-  const overlong = house.run("Alice", {
+  const overlong = await house.run("Alice", {
     name: "chore edit",
     choreName: "Kitchen",
     newName: "x".repeat(101),
   });
-  const padded = house.run("Alice", {
+  const padded = await house.run("Alice", {
     name: "chore edit",
     choreName: "Kitchen",
     newName: "  Galley  ",
@@ -202,20 +206,20 @@ test("a new name is trimmed, and a blank or overlong one is refused", () => {
     "A Chore name can be at most 100 characters.",
   );
   expect(padded.reply.content).toBe("Renamed Kitchen to Galley.");
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
-    /^\*\*Global\*\*\n- Galley\n\n/,
-  );
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toMatch(/^\*\*Global\*\*\n- Galley\n\n/);
 });
 
-test("adding a Chore whose name is already active is refused, ignoring case", () => {
+test("adding a Chore whose name is already active is refused, ignoring case", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
 
-  const duplicate = house.run("Chloe", {
+  const duplicate = await house.run("Chloe", {
     name: "chore add",
     choreName: " KITCHEN ",
     scope: "floor-3",
@@ -225,7 +229,7 @@ test("adding a Chore whose name is already active is refused, ignoring case", ()
     content: "There is already a Chore named Kitchen.",
     private: true,
   });
-  expect(house.run("Chloe", { name: "chore list" }).reply.content).toBe(
+  expect((await house.run("Chloe", { name: "chore list" })).reply.content).toBe(
     [
       "**Global**",
       "- Kitchen",
@@ -239,16 +243,20 @@ test("adding a Chore whose name is already active is refused, ignoring case", ()
   );
 });
 
-test("renaming a Chore to another active Chore's name is refused, ignoring case", () => {
+test("renaming a Chore to another active Chore's name is refused, ignoring case", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
-  house.run("Alice", { name: "chore add", choreName: "Bins", scope: "global" });
+  await house.run("Alice", {
+    name: "chore add",
+    choreName: "Bins",
+    scope: "global",
+  });
 
-  const duplicate = house.run("Alice", {
+  const duplicate = await house.run("Alice", {
     name: "chore edit",
     choreName: "Bins",
     newName: "kitchen",
@@ -257,20 +265,20 @@ test("renaming a Chore to another active Chore's name is refused, ignoring case"
   expect(duplicate.reply.content).toBe(
     "There is already a Chore named Kitchen.",
   );
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
-    /^\*\*Global\*\*\n- Bins\n- Kitchen\n\n/,
-  );
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toMatch(/^\*\*Global\*\*\n- Bins\n- Kitchen\n\n/);
 });
 
-test("a Chore can be renamed to a different case of its own name", () => {
+test("a Chore can be renamed to a different case of its own name", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "kitchen",
     scope: "global",
   });
 
-  const edited = house.run("Alice", {
+  const edited = await house.run("Alice", {
     name: "chore edit",
     choreName: "kitchen",
     newName: "Kitchen",
@@ -279,16 +287,16 @@ test("a Chore can be renamed to a different case of its own name", () => {
   expect(edited.reply.content).toBe("Renamed kitchen to Kitchen.");
 });
 
-test("a retired Chore's name can be used again", () => {
+test("a retired Chore's name can be used again", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
-  house.run("Alice", { name: "chore retire", choreName: "Kitchen" });
+  await house.run("Alice", { name: "chore retire", choreName: "Kitchen" });
 
-  const added = house.run("Alice", {
+  const added = await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "floor-1",
@@ -297,20 +305,20 @@ test("a retired Chore's name can be used again", () => {
   expect(added.reply.content).toBe("Added Kitchen to the Floor 1 Chores.");
 });
 
-test("members who are not Housemates cannot edit or retire Chores", () => {
+test("members who are not Housemates cannot edit or retire Chores", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
 
-  const edited = house.run("Guest", {
+  const edited = await house.run("Guest", {
     name: "chore edit",
     choreName: "Kitchen",
     newName: "Galley",
   });
-  const retired = house.run("Mixed", {
+  const retired = await house.run("Mixed", {
     name: "chore retire",
     choreName: "Kitchen",
   });
@@ -321,30 +329,34 @@ test("members who are not Housemates cannot edit or retire Chores", () => {
   expect(retired.reply.content).toMatch(
     /^You have both the Floor 1 and Floor 3 roles/,
   );
-  expect(house.run("Alice", { name: "chore list" }).reply.content).toMatch(
-    /^\*\*Global\*\*\n- Kitchen\n\n/,
-  );
+  expect(
+    (await house.run("Alice", { name: "chore list" })).reply.content,
+  ).toMatch(/^\*\*Global\*\*\n- Kitchen\n\n/);
 });
 
-test("Chore autocomplete suggests active Chores containing the typed text", () => {
+test("Chore autocomplete suggests active Chores containing the typed text", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
   });
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Floor 3 kitchen",
     scope: "floor-3",
   });
-  house.run("Alice", { name: "chore add", choreName: "Bins", scope: "global" });
-  house.run("Alice", {
+  await house.run("Alice", {
+    name: "chore add",
+    choreName: "Bins",
+    scope: "global",
+  });
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Old kitchen",
     scope: "global",
   });
-  house.run("Alice", { name: "chore retire", choreName: "Old kitchen" });
+  await house.run("Alice", { name: "chore retire", choreName: "Old kitchen" });
 
   expect(house.suggest("Chloe", { name: "chore", text: "KITCH" })).toEqual([
     { label: "Floor 3 kitchen (Floor 3)", value: "Floor 3 kitchen" },
@@ -353,9 +365,9 @@ test("Chore autocomplete suggests active Chores containing the typed text", () =
   expect(house.suggest("Chloe", { name: "chore", text: "" })).toHaveLength(3);
 });
 
-test("Chore autocomplete suggests nothing to members who are not Housemates", () => {
+test("Chore autocomplete suggests nothing to members who are not Housemates", async () => {
   const house = createTestHouse();
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: "Kitchen",
     scope: "global",
@@ -364,16 +376,16 @@ test("Chore autocomplete suggests nothing to members who are not Housemates", ()
   expect(house.suggest("Guest", { name: "chore", text: "" })).toEqual([]);
 });
 
-test("Chore autocomplete stays within Discord's limits", () => {
+test("Chore autocomplete stays within Discord's limits", async () => {
   const house = createTestHouse();
   const longName = "x".repeat(95);
-  house.run("Alice", {
+  await house.run("Alice", {
     name: "chore add",
     choreName: longName,
     scope: "global",
   });
   for (let i = 10; i < 40; i++) {
-    house.run("Alice", {
+    await house.run("Alice", {
       name: "chore add",
       choreName: `Chore ${String(i)}`,
       scope: "global",

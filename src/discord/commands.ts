@@ -1,4 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
+import type { Config } from "../config.ts";
 import { maxChoreNameLength, scopeLabels, scopes } from "../house/index.ts";
 
 const scopeChoices = scopes.map((scope) => ({
@@ -6,8 +7,8 @@ const scopeChoices = scopes.map((scope) => ({
   value: scope,
 }));
 
-/** The slash commands registered in the house server. */
-export const commandDefinitions = [
+/** The commands registered in every server. */
+const commands = [
   new SlashCommandBuilder()
     .setName("ping")
     .setDescription("Check that the bot is connected"),
@@ -75,4 +76,34 @@ export const commandDefinitions = [
     .addSubcommand((sub) =>
       sub.setName("list").setDescription("List the active Chores by Scope"),
     ),
-].map((command) => command.toJSON());
+];
+
+/** Test server only: commands for walking the bot through time. */
+const devCommand = new SlashCommandBuilder()
+  .setName("dev")
+  .setDescription("Test server tools")
+  .addSubcommand((sub) =>
+    sub
+      .setName("advance-to")
+      .setDescription("Move the bot's time forward and run any jobs now due")
+      .addStringOption((option) =>
+        option
+          .setName("datetime")
+          .setDescription(
+            "House time as YYYY-MM-DD HH:MM, e.g. 2026-11-27 09:00",
+          )
+          .setRequired(true),
+      ),
+  )
+  .addSubcommand((sub) =>
+    sub.setName("now").setDescription("Show the bot's time"),
+  );
+
+/** The slash commands to register in the configured server. `/dev` exists only in the test server. */
+export function commandDefinitions({
+  isTestServer,
+}: Pick<Config, "isTestServer">) {
+  return [...commands, ...(isTestServer ? [devCommand] : [])].map((command) =>
+    command.toJSON(),
+  );
+}

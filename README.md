@@ -20,6 +20,42 @@ Changes to the pool apply from the next monthly run and never alter existing Ass
 A Housemate is a member with exactly one of the `Floor 1` or `Floor 3` roles.
 Anyone else gets a private refusal explaining why.
 
+## Scheduled jobs
+
+| Job    | When                    | What it does                                                  |
+| ------ | ----------------------- | ------------------------------------------------------------- |
+| Backup | Daily, 03:00 house time | Posts a snapshot of the database in #bot-admin (see Backups). |
+
+The bot checks for due jobs when it starts and about once a minute.
+Each job runs at most once per day, even across restarts.
+If the bot was off when a job was due, the job runs once when it comes back, for the current day only: missed earlier days are not made up.
+
+## Backups
+
+Every day at 03:00 house time the bot posts a snapshot of its database in #bot-admin, as an attachment named `fade-house-YYYY-MM-DD.db`.
+The snapshot is taken with SQLite's online backup, so it is consistent even while the bot is writing.
+If the snapshot fails, or is too big to attach (10 MiB), the bot posts an error there instead.
+
+To take a backup by hand, run this in the directory the bot is started from (the `sqlite3` command ships with macOS):
+
+```sh
+sqlite3 fade-house.db ".backup fade-house-manual.db"
+```
+
+Never copy `fade-house.db` itself while the bot is running: recent changes may still be in `fade-house.db-wal`.
+
+To restore from a backup:
+
+1. Stop the bot.
+2. Download the backup you want from #bot-admin.
+3. In the directory the bot is started from, move `fade-house.db` somewhere safe, along with `fade-house.db-wal` and `fade-house.db-shm` if they exist.
+   They belong to the old database and must not sit next to the restored one.
+4. Copy the backup into that directory as `fade-house.db`.
+5. Start the bot.
+   It applies any migrations newer than the backup.
+
+Everything since the backup was taken is lost, and scheduled jobs that ran since then may run again.
+
 ## Local setup
 
 1. Install Node.js 26 (the version is pinned in `.node-version`).
@@ -73,6 +109,21 @@ Keep the production token out of it while developing; a lint rule rejects any co
 | `npm run lint`      | Runs ESLint and checks Prettier formatting. |
 | `npm run format`    | Formats every file with Prettier.           |
 
+### Moving the bot's time
+
+With `IS_TEST_SERVER=true`, the bot registers two extra commands for walking through the month in the test server:
+
+| Command                              | What it does                                                            |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| `/dev advance-to <YYYY-MM-DD HH:MM>` | Moves the bot's time forward to a house time and runs any jobs now due. |
+| `/dev now`                           | Shows the bot's time.                                                   |
+
+The bot's time keeps running from where it was moved to, and only moves forward.
+It goes back to the real time when the bot restarts.
+Jobs that ran for days you moved past are then skipped when those days really arrive, so use a throwaway database for the walk-through.
+For example, `/dev advance-to 2026-11-13 03:00` posts that day's backup in #bot-admin.
+Outside the test server these commands are not registered, and the House refuses them.
+
 CI runs the typecheck, lint and tests on every push and pull request.
 
 All behaviour lives in the House core (`src/house/`), which knows nothing about Discord.
@@ -81,3 +132,4 @@ The Discord adapter (`src/discord/`) is a thin translation layer around it and i
 
 Tests drive only the House core, through `test/harness.ts`: an in-memory SQLite database, a fake Clock, and a roster of two Floor 1 and four Floor 3 Housemates plus members who are not Housemates.
 They never inspect database rows or call internal modules, so the internals can change freely.
+The one exception is `test/commands.test.ts`, which checks that the `/dev` commands are registered only in the test server.
