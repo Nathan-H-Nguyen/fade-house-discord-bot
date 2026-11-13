@@ -49,7 +49,7 @@ export function foldChoreName(name: string): string {
   return name.toLowerCase();
 }
 
-function sameChoreName(a: string, b: string): boolean {
+export function sameChoreName(a: string, b: string): boolean {
   return foldChoreName(a) === foldChoreName(b);
 }
 
