@@ -8,6 +8,8 @@ import {
   type Clock,
   type Command,
   type Member,
+  type Outbound,
+  type Post,
   type Roster,
   type SuggestionField,
 } from "../src/house/index.ts";
@@ -35,7 +37,7 @@ export const roster = [
   { id: "9003", displayName: "SomeBot", isBot: true, roleNames: ["Floor 1"] },
 ] as const satisfies readonly Member[];
 
-type MemberName = (typeof roster)[number]["displayName"];
+export type MemberName = (typeof roster)[number]["displayName"];
 
 /** The roster fixture's members with the given display names. */
 export function membersNamed(...names: MemberName[]): Member[] {
@@ -84,6 +86,18 @@ export function temporaryPath(name: string): string {
     rmSync(dir, { recursive: true, force: true });
   });
   return join(dir, name);
+}
+
+/** The contents of the messages posted in `channel`, in order. */
+export function postsIn(
+  outbound: readonly Outbound[],
+  channel: Post["channel"],
+): string[] {
+  return outbound.flatMap((message) =>
+    "channel" in message && message.channel === channel
+      ? [message.content]
+      : [],
+  );
 }
 
 export type TestHouse = ReturnType<typeof createTestHouse>;

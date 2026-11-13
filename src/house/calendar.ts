@@ -121,6 +121,13 @@ export function formatMonth(month: Month): string {
   return `${pad(month.year, 4)}-${pad(month.month)}`;
 }
 
+/** Reads a month written as YYYY-MM, as `formatMonth` writes it. */
+export function parseMonth(text: string): Month {
+  const match = /^(\d{4})-(\d{2})$/.exec(text);
+  if (!match) throw new Error(`Not a month: "${text}"`);
+  return { year: Number(match[1]), month: Number(match[2]) };
+}
+
 const monthNames = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
   month: "long",

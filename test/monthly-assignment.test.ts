@@ -3,8 +3,10 @@ import type { Outbound, Scope } from "../src/house/index.ts";
 import {
   createTestHouse,
   membersNamed,
+  postsIn,
   roster,
   temporaryPath,
+  type MemberName,
   type TestHouse,
 } from "./harness.ts";
 
@@ -76,12 +78,18 @@ function counts(outbound: Outbound[]): Record<string, number> {
   );
 }
 
-function postsIn(outbound: Outbound[], channel: "chores" | "admin"): string[] {
-  return outbound.flatMap((message) =>
-    "channel" in message && message.channel === channel
-      ? [message.content]
-      : [],
-  );
+/** Completes every Assignment given, so none becomes overdue. */
+async function completeAll(
+  house: TestHouse,
+  given: ReadonlyMap<string, string>,
+): Promise<void> {
+  for (const [choreName, housemate] of given) {
+    const done = await house.run(housemate as MemberName, {
+      name: "chore done",
+      choreName,
+    });
+    expect(done.reply.content).toBe(`Completed ${choreName}.`);
+  }
 }
 
 test("at 00:05 on the 1st every active Chore is posted in #chores by Housemate, and each Housemate is DMed their own", async () => {
@@ -152,7 +160,7 @@ test("a member with both floor roles gets no Chores and is reported in #bot-admi
   const outbound = await house.tick();
 
   expect(postsIn(outbound, "admin")).toEqual([
-    "<@9002> has both the Floor 1 and Floor 3 roles, so they were given no Chores for December 2026. " +
+    "<@9002> has both the Floor 1 and Floor 3 roles, so they were given no new Chores for December 2026. " +
       "Remove one of the roles to include them from next month.",
   ]);
   expect(postsIn(outbound, "chores")[0]).not.toContain("<@9002>");
@@ -258,13 +266,15 @@ test.each(seeds)(
 
     house.setTime("2026-12-01T00:05:00-08:00");
     const december = assignees(await house.tick());
+    await completeAll(house, december);
     house.setTime("2027-01-01T00:05:00-08:00");
     const januaryOutbound = await house.tick();
     const january = assignees(januaryOutbound);
 
-    expect(postsIn(januaryOutbound, "chores")[0]).toMatch(
-      /^\*\*Chores for January 2027\*\*\n/,
-    );
+    expect(postsIn(januaryOutbound, "chores")).toEqual([
+      expect.stringMatching(/^\*\*Summary of December 2026\*\*\n/),
+      expect.stringMatching(/^\*\*Chores for January 2027\*\*\n/),
+    ]);
     expect(january.size).toBe(12);
     for (const [chore, housemate] of january) {
       expect(housemate, chore).not.toBe(december.get(chore));
@@ -280,6 +290,7 @@ test("last month's assignee keeps a Chore when no one else is eligible", async (
 
   house.setTime("2026-12-01T00:05:00-08:00");
   const december = assignees(await house.tick({ members }));
+  await completeAll(house, december);
   house.setTime("2027-01-01T00:05:00-08:00");
   const january = assignees(await house.tick({ members }));
 

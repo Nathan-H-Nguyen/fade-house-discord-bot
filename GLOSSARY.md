@@ -31,7 +31,8 @@ One Chore given to one Housemate for one month, completed once.
 _Avoid_: Task, duty
 
 **Overdue Assignment**:
-An Assignment not completed by the end of its month, which stays with the same Housemate and stands in for that Chore in the next month.
+An Assignment not completed by the end of its month, which stays with the same Housemate and stands in for that Chore in each following month until it is completed.
+It is dropped if its Housemate leaves or its Chore is retired.
 _Avoid_: Carry-over, backlog
 
 ## Rent

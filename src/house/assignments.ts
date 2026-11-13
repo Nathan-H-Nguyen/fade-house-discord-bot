@@ -1,11 +1,14 @@
 import type Database from "better-sqlite3";
+import { nameMonth, parseMonth } from "./calendar.ts";
 import {
   sameChoreName,
+  scopeLabels,
   type Chore,
   type Scope,
   type StoredChore,
 } from "./chores.ts";
 import type { Housemate } from "./housemates.ts";
+import { escapeMarkdown } from "./markdown.ts";
 
 /** One Chore given to one Housemate for one month. */
 export interface Assignment {
@@ -140,14 +143,18 @@ export function saveAssignments(
   })();
 }
 
-/** Who each Chore was given to in `month` (YYYY-MM), by Chore id. */
-export function assigneesIn(
+/**
+ * Who last held each Chore before `month` (YYYY-MM), by Chore id: the Housemate given its latest Assignment.
+ * That is last month's assignee, or the holder of an Overdue Assignment that stood in for the Chore.
+ */
+export function lastAssigneesBefore(
   db: Database.Database,
   month: string,
 ): Map<number, string> {
   const rows = db
     .prepare<[string], { chore_id: number; housemate_id: string }>(
-      "SELECT chore_id, housemate_id FROM assignments WHERE month = ?",
+      `SELECT chore_id, housemate_id FROM assignments AS a
+      WHERE month = (SELECT MAX(month) FROM assignments WHERE chore_id = a.chore_id AND month < ?)`,
     )
     .all(month);
   return new Map(rows.map((row) => [row.chore_id, row.housemate_id]));
@@ -158,15 +165,20 @@ export interface StoredAssignment {
   id: number;
   /** YYYY-MM */
   month: string;
+  choreId: number;
   choreName: string;
   choreScope: Scope;
   memberId: string;
-  completed: boolean;
+  /** When the Housemate completed it, if they have. */
+  completedAt: Date | undefined;
 }
 
-type AssignmentRow = Omit<StoredAssignment, "completed"> & {
-  completed: 0 | 1;
+type AssignmentRow = Omit<StoredAssignment, "completedAt"> & {
+  completedAt: string | null;
 };
+
+/** Matches Assignments neither completed nor dropped. */
+const openClause = "(completed_at IS NULL AND dropped_at IS NULL)";
 
 /** Selects Assignments that match `where`, oldest month first. */
 function selectAssignments(
@@ -176,14 +188,18 @@ function selectAssignments(
 ): StoredAssignment[] {
   return db
     .prepare<string[], AssignmentRow>(
-      `SELECT id, month, chore_name AS choreName, chore_scope AS choreScope,
-        housemate_id AS memberId, completed_at IS NOT NULL AS completed
+      `SELECT id, month, chore_id AS choreId, chore_name AS choreName, chore_scope AS choreScope,
+        housemate_id AS memberId, completed_at AS completedAt
       FROM assignments
       WHERE ${where}
       ORDER BY month, chore_name COLLATE NOCASE, id`,
     )
     .all(...params)
-    .map((row) => ({ ...row, completed: row.completed === 1 }));
+    .map((row) => ({
+      ...row,
+      completedAt:
+        row.completedAt === null ? undefined : new Date(row.completedAt),
+    }));
 }
 
 /** A Housemate's open Assignments, from any month, oldest month first. */
@@ -191,11 +207,39 @@ export function openAssignmentsOf(
   db: Database.Database,
   memberId: string,
 ): StoredAssignment[] {
-  return selectAssignments(
-    db,
-    "housemate_id = ? AND completed_at IS NULL",
-    memberId,
-  );
+  return selectAssignments(db, `housemate_id = ? AND ${openClause}`, memberId);
+}
+
+/**
+ * The open Assignments given in or before `month` (YYYY-MM), oldest month first.
+ * Those given before it are overdue.
+ */
+export function openAssignmentsThrough(
+  db: Database.Database,
+  month: string,
+): StoredAssignment[] {
+  return selectAssignments(db, `${openClause} AND month <= ?`, month);
+}
+
+/** The Assignments completed at or after `since`, oldest month first. */
+export function completedSince(
+  db: Database.Database,
+  since: Date,
+): StoredAssignment[] {
+  return selectAssignments(db, "completed_at >= ?", since.toISOString());
+}
+
+/** An Assignment as a line of a list, marked as overdue if it was given before `month` (YYYY-MM). */
+export function assignmentLine(
+  assignment: StoredAssignment,
+  month: string,
+): string {
+  const scope = scopeLabels[assignment.choreScope];
+  const label =
+    assignment.month < month
+      ? `${scope}, overdue from ${nameMonth(parseMonth(assignment.month))}`
+      : scope;
+  return `- ${escapeMarkdown(assignment.choreName)} (${label})`;
 }
 
 /**
@@ -219,11 +263,11 @@ export function findAssignment(
 ): StoredAssignment | undefined {
   const named = selectAssignments(
     db,
-    "completed_at IS NULL OR month = ?",
+    `${openClause} OR month = ?`,
     month,
   ).filter((a) => sameChoreName(a.choreName, choreName));
   return (
-    named.find((a) => a.memberId === memberId && !a.completed) ?? named.at(-1)
+    named.find((a) => a.memberId === memberId && !a.completedAt) ?? named.at(-1)
   );
 }
 
@@ -234,6 +278,20 @@ export function completeAssignment(
   completedAt: Date,
 ): void {
   db.prepare(
-    "UPDATE assignments SET completed_at = ? WHERE id = ? AND completed_at IS NULL",
+    `UPDATE assignments SET completed_at = ? WHERE id = ? AND ${openClause}`,
   ).run(completedAt.toISOString(), id);
+}
+
+/** Drops open Overdue Assignments, so they no longer stand in for their Chores. */
+export function dropAssignments(
+  db: Database.Database,
+  ids: readonly number[],
+  droppedAt: Date,
+): void {
+  const drop = db.prepare<[string, number]>(
+    `UPDATE assignments SET dropped_at = ? WHERE id = ? AND ${openClause}`,
+  );
+  db.transaction(() => {
+    for (const id of ids) drop.run(droppedAt.toISOString(), id);
+  })();
 }

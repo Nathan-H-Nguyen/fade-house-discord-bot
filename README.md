@@ -12,7 +12,7 @@ The vocabulary (Housemate, Chore, Scope, Assignment and so on) is defined in [GL
 | `/chore edit <chore> [name] [scope]` | Housemates | Renames a Chore or changes its Scope.                            |
 | `/chore retire <chore>`              | Housemates | Takes a Chore out of the pool, keeping its history.              |
 | `/chore list`                        | Housemates | Lists the active Chores grouped by Scope.                        |
-| `/chore mine`                        | Housemates | Lists your open Assignments, privately.                          |
+| `/chore mine`                        | Housemates | Lists your open Assignments, Overdue ones marked, privately.     |
 | `/chore done <assignment>`           | Housemates | Marks one of your open Assignments complete.                     |
 
 Edit and retire suggest active Chores as you type.
@@ -26,10 +26,10 @@ Anyone else gets a private refusal explaining why.
 
 ## Scheduled jobs
 
-| Job                | When                      | What it does                                                         |
-| ------------------ | ------------------------- | -------------------------------------------------------------------- |
-| Monthly assignment | The 1st, 00:05 house time | Hands out every active Chore for the month (see Monthly assignment). |
-| Backup             | Daily, 03:00 house time   | Posts a snapshot of the database in #bot-admin (see Backups).        |
+| Job                | When                      | What it does                                                                                   |
+| ------------------ | ------------------------- | ---------------------------------------------------------------------------------------------- |
+| Monthly assignment | The 1st, 00:05 house time | Summarises the month just ended and hands out the new month's Chores (see Monthly assignment). |
+| Backup             | Daily, 03:00 house time   | Posts a snapshot of the database in #bot-admin (see Backups).                                  |
 
 The bot checks for due jobs when it starts and about once a minute.
 Each job runs at most once per day (or month, for the monthly assignment), even across restarts.
@@ -39,17 +39,28 @@ So the first monthly assignment is on the 1st after the bot first starts.
 
 ## Monthly assignment
 
-At 00:05 on the 1st, every active Chore is given to one eligible Housemate for the month.
+At 00:05 on the 1st, the bot closes out the month just ended, then gives every active Chore to one eligible Housemate for the new month.
 Global Chores can go to anyone; Floor 1 and Floor 3 Chores go only to Housemates on that Floor.
 
+Assignments not completed by the end of their month become Overdue Assignments:
+
+- An Overdue Assignment stays with its Housemate and stands in for its Chore, so the Chore is not handed out again that month.
+- It stays overdue month after month until completed, and is completed with `/chore done` like any other Assignment.
+- It is dropped if its Housemate has left (they are no longer in the server, or have no floor role) or its Chore is retired.
+- Overdue Assignments do not count toward balancing.
+
+Before the month's Assignments, the bot posts a summary of the month just ended in #chores.
+It lists, per Housemate, the Assignments completed during that month and those now overdue, then any Overdue Assignments dropped.
+There is no summary when there is nothing to list, such as before the first monthly run.
+
 - Balancing counts each Housemate's Assignments across all Scopes, so Floor 1's Housemates, who share their Floor's Chores between fewer people, take fewer Global Chores.
-- Nobody gets the same Chore two months running unless no one else is eligible for it.
+- Nobody gets a Chore they held last (including as an Overdue Assignment) unless no one else is eligible for it.
 - Ties are broken at random.
 - A Chore whose Scope has no Housemates is not assigned, and the post lists it.
 
-The bot posts the month's Assignments in #chores, grouped by Housemate, and DMs each Housemate their own.
+The bot posts the month's Assignments in #chores, grouped by Housemate, and DMs each Housemate their own, with Overdue Assignments marked.
 If a DM cannot be delivered (for example, the Housemate does not accept DMs from server members), the bot says so in #chores.
-A member with both floor roles is left out and reported in #bot-admin.
+A member with both floor roles gets no new Chores and is reported in #bot-admin, but keeps their Overdue Assignments, which are still posted and DMed.
 Mentions in these messages show who is meant without notifying them.
 
 ## Backups

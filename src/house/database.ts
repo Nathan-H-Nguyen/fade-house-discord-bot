@@ -40,6 +40,8 @@ const migrations: readonly string[] = [
   ) STRICT`,
   // When the Housemate completed the Assignment, or null while it is open.
   `ALTER TABLE assignments ADD COLUMN completed_at TEXT`,
+  // When an Overdue Assignment was dropped because its Housemate left or its Chore was retired, or null.
+  `ALTER TABLE assignments ADD COLUMN dropped_at TEXT`,
 ];
 
 /** Opens the database at `path` (or `:memory:`) and brings its schema up to date. */
