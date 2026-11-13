@@ -16,6 +16,7 @@ import {
   type Scope,
 } from "./chores.ts";
 import {
+  assignmentLine,
   completeAssignment,
   findAssignment,
   openAssignmentsOf,
@@ -175,7 +176,15 @@ export function openHouse(options: {
       name: "monthly-assignment",
       currentPeriod: monthly(0, 5),
       run: (period, roster) =>
-        Promise.resolve(assignMonth(db, period.start, roster, random)),
+        Promise.resolve(
+          assignMonth(db, {
+            month: period.start,
+            roster,
+            random,
+            calendar,
+            now: now(),
+          }),
+        ),
     },
     {
       name: "backup",
@@ -402,10 +411,7 @@ export function openHouse(options: {
           return reply(
             [
               "Your open Assignments:",
-              ...open.map(
-                (a) =>
-                  `- ${escapeMarkdown(a.choreName)} (${scopeLabels[a.choreScope]})`,
-              ),
+              ...open.map((a) => assignmentLine(a, currentMonth())),
             ].join("\n"),
           );
         }
@@ -428,7 +434,7 @@ export function openHouse(options: {
               `${name} is ${mention(assignment.memberId)}'s Assignment, not yours.`,
             );
           }
-          if (assignment.completed) {
+          if (assignment.completedAt) {
             return reply(`You have already completed ${name}.`);
           }
           completeAssignment(db, assignment.id, now());
