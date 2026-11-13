@@ -52,3 +52,25 @@ export function housematesIn(roster: Roster): {
   }
   return { housemates, misconfigured };
 }
+
+/** Orders Housemates by Floor, then by display name. */
+export function byFloorThenName(a: Housemate, b: Housemate): number {
+  return (
+    a.floor - b.floor ||
+    a.member.displayName.localeCompare(b.member.displayName)
+  );
+}
+
+/**
+ * The members who have not left, and so keep their Assignments: the roster's Housemates by Floor then name,
+ * then the members with several floor roles by name, who are not Housemates but have not left.
+ */
+export function stayingMembersIn(roster: Roster): Member[] {
+  const { housemates, misconfigured } = housematesIn(roster);
+  return [
+    ...[...housemates].sort(byFloorThenName).map((h) => h.member),
+    ...misconfigured
+      .map((m) => m.member)
+      .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+  ];
+}

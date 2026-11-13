@@ -23,7 +23,11 @@ import {
   scopeLabels,
   type StoredChore,
 } from "./chores.ts";
-import { housematesIn, type Housemate } from "./housemates.ts";
+import {
+  byFloorThenName,
+  housematesIn,
+  stayingMembersIn,
+} from "./housemates.ts";
 import type { Member, Outbound, Post, Roster } from "./index.ts";
 import { escapeMarkdown, mention } from "./markdown.ts";
 
@@ -39,13 +43,6 @@ function choreLines(chores: readonly StoredChore[]): string[] {
   return [...chores]
     .sort((a, b) => foldChoreName(a.name).localeCompare(foldChoreName(b.name)))
     .map((c) => `- ${escapeMarkdown(c.name)} (${scopeLabels[c.scope]})`);
-}
-
-function byFloorThenName(a: Housemate, b: Housemate): number {
-  return (
-    a.floor - b.floor ||
-    a.member.displayName.localeCompare(b.member.displayName)
-  );
 }
 
 /** The Assignments completed during `month` in the house timezone. */
@@ -152,13 +149,7 @@ export function assignMonth(
   const lastMonth = previousMonth(month);
   const { housemates: unordered, misconfigured } = housematesIn(roster);
   const housemates = [...unordered].sort(byFloorThenName);
-  // Members with several floor roles are not Housemates, but have not left, so they keep their Overdue Assignments.
-  const members = [
-    ...housemates.map((h) => h.member),
-    ...misconfigured
-      .map((m) => m.member)
-      .sort((a, b) => a.displayName.localeCompare(b.displayName)),
-  ];
+  const members = stayingMembersIn(roster);
   const chores = activeChores(db);
 
   // Overdue Assignments are dropped when their Housemate has left or their Chore is retired.

@@ -23,6 +23,7 @@ import {
   type Random,
 } from "./assignments.ts";
 import { backUp } from "./backup.ts";
+import { reminderDay, remindOfChores } from "./chore-reminder.ts";
 import {
   formatDateTime,
   formatMonth,
@@ -183,6 +184,18 @@ export function openHouse(options: {
             random,
             calendar,
             now: now(),
+          }),
+        ),
+    },
+    {
+      name: "chore-reminder",
+      currentPeriod: monthly(9, 0, reminderDay),
+      run: (period, roster) =>
+        Promise.resolve(
+          remindOfChores(db, {
+            month: period.start,
+            today: calendar.toLocal(now()),
+            roster,
           }),
         ),
     },

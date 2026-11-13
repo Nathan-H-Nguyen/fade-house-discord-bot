@@ -35,6 +35,11 @@ An Assignment not completed by the end of its month, which stays with the same H
 It is dropped if its Housemate leaves or its Chore is retired.
 _Avoid_: Carry-over, backlog
 
+**Chore Reminder**:
+A private message, once a month seven days before its last day, listing a Housemate's open Assignments.
+Housemates with nothing open get none.
+_Avoid_: Notification, nag
+
 ## Rent
 
 **Rent**:
