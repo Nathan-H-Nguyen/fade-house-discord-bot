@@ -1,34 +1,82 @@
 import type Database from "better-sqlite3";
-import { formatDate, previousDay, type LocalDateTime } from "./calendar.ts";
-import type { Outbound } from "./index.ts";
+import {
+  formatDate,
+  formatDateTime,
+  formatMonth,
+  previousDay,
+  previousMonth,
+  type LocalDateTime,
+} from "./calendar.ts";
+import type { Outbound, Roster } from "./index.ts";
 
-/** A job that runs once a day from a fixed house time, for the date it falls on. */
-export interface DailyJob {
-  name: string;
-  hour: number;
-  minute: number;
-  /** Runs the job for `date` (YYYY-MM-DD), returning the messages it sends. */
-  run(date: string): Promise<Outbound[]>;
+/** One occurrence of a job: named by `key`, such as 2026-11-12 or 2026-12, and starting at `start`. */
+export interface Period {
+  key: string;
+  start: LocalDateTime;
 }
 
-/** The date of the job's most recent start time at or before `now`. */
-function currentPeriod(job: DailyJob, now: LocalDateTime): string {
-  const started =
-    now.hour > job.hour || (now.hour === job.hour && now.minute >= job.minute);
-  return formatDate(started ? now : previousDay(now));
+/** A job that runs once per period, from the house time each period starts. */
+export interface Job {
+  name: string;
+  /** The period whose start is the most recent at or before `now`. */
+  currentPeriod(now: LocalDateTime): Period;
+  /** Runs the job for `period`, with the server's members as they are now, returning the messages it sends. */
+  run(period: Period, roster: Roster): Promise<Outbound[]>;
+}
+
+function startedBy(now: LocalDateTime, hour: number, minute: number): boolean {
+  return now.hour > hour || (now.hour === hour && now.minute >= minute);
+}
+
+/** Periods of one day, each starting at `hour`:`minute` and named by its date. */
+export function daily(hour: number, minute: number): Job["currentPeriod"] {
+  return (now) => {
+    const date = startedBy(now, hour, minute) ? now : previousDay(now);
+    return {
+      key: formatDate(date),
+      start: {
+        year: date.year,
+        month: date.month,
+        day: date.day,
+        hour,
+        minute,
+      },
+    };
+  };
+}
+
+/** Periods of one month, each starting on the 1st at `hour`:`minute` and named by its month. */
+export function monthly(hour: number, minute: number): Job["currentPeriod"] {
+  return (now) => {
+    const started = now.day > 1 || startedBy(now, hour, minute);
+    const month = started ? now : previousMonth(now);
+    return {
+      key: formatMonth(month),
+      start: { year: month.year, month: month.month, day: 1, hour, minute },
+    };
+  };
 }
 
 /**
  * Runs every job whose current period is missing from the ledger, recording each once it completes,
  * so a job runs at most once per period across restarts.
  * After downtime a missed job runs once, for the current period only: earlier periods are not backfilled.
+ * A job never runs for a period that started before the scheduler first saw it,
+ * so a new database, or a newly added job, waits for the next period rather than joining one under way.
  */
 export async function runDueJobs(
   db: Database.Database,
-  jobs: readonly DailyJob[],
+  jobs: readonly Job[],
+  roster: Roster,
   now: LocalDateTime,
   completedAt: Date,
 ): Promise<Outbound[]> {
+  const see = db.prepare<[string, string]>(
+    "INSERT OR IGNORE INTO job_schedules (job, since) VALUES (?, ?)",
+  );
+  const since = db
+    .prepare<[string], string>("SELECT since FROM job_schedules WHERE job = ?")
+    .pluck();
   const hasRun = db.prepare<[string, string], 1>(
     "SELECT 1 FROM job_runs WHERE job = ? AND period = ?",
   );
@@ -38,10 +86,13 @@ export async function runDueJobs(
 
   const outbound: Outbound[] = [];
   for (const job of jobs) {
-    const period = currentPeriod(job, now);
-    if (hasRun.get(job.name, period)) continue;
-    outbound.push(...(await job.run(period)));
-    record.run(job.name, period, completedAt.toISOString());
+    see.run(job.name, formatDateTime(now));
+    const period = job.currentPeriod(now);
+    // Both are YYYY-MM-DD HH:MM, so they compare as text.
+    if (formatDateTime(period.start) < (since.get(job.name) ?? "")) continue;
+    if (hasRun.get(job.name, period.key)) continue;
+    outbound.push(...(await job.run(period, roster)));
+    record.run(job.name, period.key, completedAt.toISOString());
   }
   return outbound;
 }

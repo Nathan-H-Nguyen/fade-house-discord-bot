@@ -5,7 +5,9 @@ import { createTestHouse, temporaryPath } from "./harness.ts";
 
 /** The names of the backups among the messages a tick sent. */
 function backups(outbound: Outbound[]): (string | undefined)[] {
-  return outbound.map((message) => message.attachment?.name);
+  return outbound.map((message) =>
+    "channel" in message ? message.attachment?.name : undefined,
+  );
 }
 
 test("at 03:00 house time a snapshot of the database is posted to #bot-admin, named with the date", async () => {
@@ -38,7 +40,9 @@ test("a posted backup restores to a House with the same Chores", async () => {
     scope: "global",
   });
   const [backup] = await house.tick();
-  if (!backup?.attachment) throw new Error("Expected a backup attachment");
+  if (!backup || !("channel" in backup) || !backup.attachment) {
+    throw new Error("Expected a backup attachment");
+  }
 
   const databasePath = temporaryPath("restored.db");
   writeFileSync(databasePath, backup.attachment.data);
@@ -61,6 +65,14 @@ test("the backup runs once a day, at 03:00 house time", async () => {
   expect(backups(await house.tick())).toEqual(["fade-house-2026-11-12.db"]);
   house.setTime("2026-11-12T23:59:00-08:00");
   expect(await house.tick()).toEqual([]);
+});
+
+test("a new bot waits for the next 03:00 rather than backing up for a day already under way", async () => {
+  const house = createTestHouse({ now: "2026-11-12T10:00:00-08:00" });
+  expect(await house.tick()).toEqual([]);
+
+  house.setTime("2026-11-13T03:00:00-08:00");
+  expect(backups(await house.tick())).toEqual(["fade-house-2026-11-13.db"]);
 });
 
 test("a restart after the day's backup does not back up again", async () => {

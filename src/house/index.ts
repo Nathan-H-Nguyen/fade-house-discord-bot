@@ -15,12 +15,14 @@ import {
   updateChore,
   type Scope,
 } from "./chores.ts";
+import type { Random } from "./assignments.ts";
 import { backUp } from "./backup.ts";
 import { formatDateTime, houseCalendar, parseDateTime } from "./calendar.ts";
 import { openDatabase } from "./database.ts";
 import { resolveMember } from "./housemates.ts";
 import { escapeMarkdown } from "./markdown.ts";
-import { runDueJobs, type DailyJob } from "./scheduler.ts";
+import { assignMonth } from "./monthly-run.ts";
+import { daily, monthly, runDueJobs, type Job } from "./scheduler.ts";
 
 export { maxChoreNameLength, scopes, scopeLabels, type Scope };
 
@@ -68,12 +70,23 @@ export interface Attachment {
   data: Uint8Array;
 }
 
-/** A message the caller must deliver beyond the reply: a post in #bot-admin. */
-export interface Outbound {
-  channel: "admin";
+/** A message to post in #chores or #bot-admin. */
+export interface Post {
+  channel: "chores" | "admin";
   content: string;
   attachment?: Attachment;
 }
+
+/** A message to send a member privately. */
+export interface DirectMessage {
+  memberId: string;
+  content: string;
+  /** Posted instead, to say so, if the member cannot be sent DMs. */
+  ifUndelivered: Post;
+}
+
+/** A message the caller must deliver beyond the reply, in the order given. */
+export type Outbound = Post | DirectMessage;
 
 export interface CommandResult {
   reply: Reply;
@@ -108,8 +121,8 @@ export interface House {
     roster: Roster;
     field: SuggestionField;
   }): Suggestion[];
-  /** Runs any scheduled jobs that are due, returning the messages they send. */
-  tick(): Promise<Outbound[]>;
+  /** Runs any scheduled jobs that are due, with the server's members as they are now, returning the messages they send. */
+  tick(roster: Roster): Promise<Outbound[]>;
   /** Waits for any tick in progress, then closes the database. The House must not be used afterwards. */
   close(): Promise<void>;
 }
@@ -123,6 +136,8 @@ export function openHouse(options: {
   attachmentLimitBytes: number;
   /** Whether the bot is running in the test server, which enables the `/dev` commands. */
   isTestServer: boolean;
+  /** The source of randomness for handing out Chores. Defaults to `Math.random`. */
+  random?: Random;
 }): House {
   const db = openDatabase(options.databasePath);
   const calendar = houseCalendar(options.timezone);
@@ -134,13 +149,20 @@ export function openHouse(options: {
     return new Date(options.clock.now().getTime() + devOffsetMs);
   }
 
-  const jobs: DailyJob[] = [
+  const random = options.random ?? Math.random;
+
+  const jobs: Job[] = [
+    {
+      name: "monthly-assignment",
+      currentPeriod: monthly(0, 5),
+      run: (period, roster) =>
+        Promise.resolve(assignMonth(db, period.start, roster, random)),
+    },
     {
       name: "backup",
-      hour: 3,
-      minute: 0,
-      run: async (date) => [
-        await backUp(db, date, options.attachmentLimitBytes),
+      currentPeriod: daily(3, 0),
+      run: async (period) => [
+        await backUp(db, period.key, options.attachmentLimitBytes),
       ],
     },
   ];
@@ -148,10 +170,10 @@ export function openHouse(options: {
   // Ticks run one after another, so no job starts again while a run of it is still in progress.
   let ticking: Promise<unknown> = Promise.resolve();
 
-  function tick(): Promise<Outbound[]> {
+  function tick(roster: Roster): Promise<Outbound[]> {
     const next = ticking.then(() => {
       const at = now();
-      return runDueJobs(db, jobs, calendar.toLocal(at), at);
+      return runDueJobs(db, jobs, roster, calendar.toLocal(at), at);
     });
     ticking = next.catch(() => undefined);
     return next;
@@ -248,7 +270,7 @@ export function openHouse(options: {
           );
         }
         devOffsetMs = target.getTime() - options.clock.now().getTime();
-        const outbound = await tick();
+        const outbound = await tick(roster);
         return {
           reply: {
             content: `Moved the bot's time to ${describeNow()}.`,

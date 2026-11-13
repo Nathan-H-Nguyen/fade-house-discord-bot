@@ -22,6 +22,22 @@ const migrations: readonly string[] = [
     completed_at TEXT NOT NULL,
     PRIMARY KEY (job, period)
   ) STRICT`,
+  // When the scheduler first saw each job, as a house time YYYY-MM-DD HH:MM.
+  `CREATE TABLE job_schedules (
+    job TEXT PRIMARY KEY,
+    since TEXT NOT NULL
+  ) STRICT`,
+  // One Chore given to one Housemate for one month (YYYY-MM). The Chore's name and Scope are
+  // copied as assigned, so later edits to the Chore never change existing Assignments.
+  `CREATE TABLE assignments (
+    id INTEGER PRIMARY KEY,
+    month TEXT NOT NULL,
+    chore_id INTEGER NOT NULL REFERENCES chores (id),
+    chore_name TEXT NOT NULL,
+    chore_scope TEXT NOT NULL CHECK (chore_scope IN ('global', 'floor-1', 'floor-3')),
+    housemate_id TEXT NOT NULL,
+    UNIQUE (month, chore_id)
+  ) STRICT`,
 ];
 
 /** Opens the database at `path` (or `:memory:`) and brings its schema up to date. */
