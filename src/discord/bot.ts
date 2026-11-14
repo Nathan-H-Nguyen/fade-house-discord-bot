@@ -298,6 +298,14 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
         name: "chore done",
         choreName: interaction.options.getString("assignment", true),
       };
+    case "rent set":
+      return {
+        name: "rent set",
+        memberId: interaction.options.getUser("housemate", true).id,
+        amount: interaction.options.getString("amount", true),
+      };
+    case "rent list":
+      return { name: "rent list" };
     case "dev now":
       return { name: "dev now" };
     case "dev advance-to":

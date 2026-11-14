@@ -42,6 +42,11 @@ const migrations: readonly string[] = [
   `ALTER TABLE assignments ADD COLUMN completed_at TEXT`,
   // When an Overdue Assignment was dropped because its Housemate left or its Chore was retired, or null.
   `ALTER TABLE assignments ADD COLUMN dropped_at TEXT`,
+  // Each Housemate's monthly Rent, in integer cents. A Housemate without a row has no Rent set.
+  `CREATE TABLE rents (
+    housemate_id TEXT PRIMARY KEY,
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0)
+  ) STRICT`,
 ];
 
 /** Opens the database at `path` (or `:memory:`) and brings its schema up to date. */

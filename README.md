@@ -14,12 +14,15 @@ The vocabulary (Housemate, Chore, Scope, Assignment and so on) is defined in [GL
 | `/chore list`                        | Housemates | Lists the active Chores grouped by Scope.                        |
 | `/chore mine`                        | Housemates | Lists your open Assignments, Overdue ones marked, privately.     |
 | `/chore done <assignment>`           | Housemates | Marks one of your open Assignments complete.                     |
+| `/rent set <housemate> <amount>`     | Admins     | Sets a Housemate's monthly Rent, in dollars such as 1250.50.     |
+| `/rent list`                         | Housemates | Lists every Housemate's Rent, flagging any without one set.      |
 
 Edit and retire suggest active Chores as you type.
 Done suggests only your own open Assignments, and posts a short completion message in #chores.
 Completing someone else's Assignment, or one already complete, is refused privately.
 Active Chore names must be unique, ignoring case.
 Changes to the pool apply from the next monthly run and never alter existing Assignments.
+Admins are Housemates with the Discord Administrator permission; anyone else using `/rent set` is refused privately.
 
 A Housemate is a member with exactly one of the `Floor 1` or `Floor 3` roles.
 Anyone else gets a private refusal explaining why.

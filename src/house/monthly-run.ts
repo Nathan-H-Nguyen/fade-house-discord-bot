@@ -25,6 +25,7 @@ import {
 } from "./chores.ts";
 import {
   byFloorThenName,
+  floorRoleNames,
   housematesIn,
   stayingMembersIn,
 } from "./housemates.ts";
@@ -222,7 +223,7 @@ export function assignMonth(
   const reports: Outbound[] = misconfigured.map(({ member, floors }) => ({
     channel: "admin",
     content:
-      `${mention(member.id)} has both the ${floors.map((f) => `Floor ${String(f)}`).join(" and ")} roles, ` +
+      `${mention(member.id)} has both the ${floorRoleNames(floors)} roles, ` +
       `so they were given no new Chores for ${monthName}. Remove one of the roles to include them from next month.`,
   }));
 

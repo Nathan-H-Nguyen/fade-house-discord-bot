@@ -53,6 +53,11 @@ export function housematesIn(roster: Roster): {
   return { housemates, misconfigured };
 }
 
+/** Names floor roles for a message, such as "Floor 1 and Floor 3". */
+export function floorRoleNames(floors: readonly Floor[]): string {
+  return floors.map((f) => `Floor ${String(f)}`).join(" and ");
+}
+
 /** Orders Housemates by Floor, then by display name. */
 export function byFloorThenName(a: Housemate, b: Housemate): number {
   return (
