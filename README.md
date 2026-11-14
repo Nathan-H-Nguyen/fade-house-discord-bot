@@ -84,6 +84,7 @@ If the bot is off from before the reminder time until the month has ended, that 
 Each rent period is named after the month the Rent is for, and starts at 09:00 house time three days before the end of the month before.
 December's period starts on November 27, and its Due Date is December 1.
 A period runs until the next one starts, so `/rent paid` always marks the latest period that has started.
+Rent left unpaid when the next period starts is no longer reminded of or shown, and has to be settled outside the bot.
 
 Every day at 09:00 from the start of the period, each Housemate with Rent set who has not marked it paid gets a Rent Reminder DM with their amount and the Due Date.
 After the Due Date the reminder says they are overdue.
@@ -94,6 +95,7 @@ If the bot is off at 09:00, the day's reminder goes out when it comes back that 
 
 Marking Rent paid again before the next period starts is refused, naming when it starts.
 Once every Housemate with Rent set has paid for a period, the bot says so once in #chores.
+It does not wait on members who have left, but does wait on a member with both floor roles, who must have one removed before they can mark their Rent paid.
 `/rent list` shows, for the current period, who has paid, who has not and who is overdue.
 
 The bot tracks Rent from the first rent period that starts after it first runs: until then there are no Rent Reminders, and `/rent paid` is refused.

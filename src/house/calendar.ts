@@ -90,9 +90,16 @@ export function formatDate(date: LocalDate): string {
   return `${pad(date.year, 4)}-${pad(date.month)}-${pad(date.day)}`;
 }
 
+/** Formats a time of day as HH:MM. */
+export function formatTime(
+  time: Pick<LocalDateTime, "hour" | "minute">,
+): string {
+  return `${pad(time.hour)}:${pad(time.minute)}`;
+}
+
 /** Formats a date and time as YYYY-MM-DD HH:MM. */
 export function formatDateTime(time: LocalDateTime): string {
-  return `${formatDate(time)} ${pad(time.hour)}:${pad(time.minute)}`;
+  return `${formatDate(time)} ${formatTime(time)}`;
 }
 
 /** Reads a date and time written as YYYY-MM-DD HH:MM, without checking it is a real time. */

@@ -363,3 +363,18 @@ test("/rent list shows who has paid for the current period, and who is overdue a
     "- <@1001> (Floor 1): $1,250.00, **overdue**",
   );
 });
+
+test("the all-paid message waits on a member with both floor roles who has not paid", async () => {
+  const house = await houseWithRent();
+  const [alice, chloe] = membersNamed("Alice", "Chloe");
+  if (!alice || !chloe) throw new Error("The roster fixture has changed");
+  await rentRemindersAt(house, "2026-11-27T09:00:00-08:00");
+  await house.run("Alice", { name: "rent paid" });
+
+  house.setTime("2026-11-28T09:00:00-08:00");
+  const outbound = await house.tick({
+    members: [alice, { ...chloe, roleNames: ["Floor 1", "Floor 3"] }],
+  });
+
+  expect(postsIn(outbound, "chores")).toEqual([]);
+});
