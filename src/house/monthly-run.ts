@@ -1,7 +1,9 @@
 import type Database from "better-sqlite3";
 import {
   assignmentLine,
+  assignmentsOfMonth,
   completedSince,
+  discardOpenAssignments,
   dropAssignments,
   lastAssigneesBefore,
   openAssignmentsThrough,
@@ -148,8 +150,7 @@ export function assignMonth(
 ): Outbound[] {
   const key = formatMonth(month);
   const lastMonth = previousMonth(month);
-  const { housemates: unordered, misconfigured } = housematesIn(roster);
-  const housemates = [...unordered].sort(byFloorThenName);
+  const housemates = [...housematesIn(roster).housemates].sort(byFloorThenName);
   const members = stayingMembersIn(roster);
   const chores = activeChores(db);
 
@@ -183,7 +184,79 @@ export function assignMonth(
     dropped,
   });
 
+  return [
+    ...(summary ? [summary] : []),
+    ...announce(db, { month, roster, skipped, reassigned: false }),
+    ...reportMisconfigured(roster, month),
+  ];
+}
+
+/**
+ * Discards the open Assignments given in `month`, keeping those completed and the Overdue Assignments standing in,
+ * and hands the active Chores they leave uncovered out again, as the monthly run would.
+ * Kept Assignments given in `month` count toward the balance. `handedOutAt` is when the monthly run handed `month` out.
+ * Returns the post for #chores and a DM to each holder. Members with several floor roles were reported by the monthly run.
+ */
+export function reassignMonth(
+  db: Database.Database,
+  {
+    month,
+    handedOutAt,
+    roster,
+    random,
+  }: {
+    month: Month;
+    handedOutAt: Date;
+    roster: Roster;
+    random: Random;
+  },
+): Outbound[] {
+  const key = formatMonth(month);
+  const { skipped } = db.transaction(() => {
+    discardOpenAssignments(db, key);
+    const kept = assignmentsOfMonth(db, { month: key, handedOutAt });
+    const counts = new Map<string, number>();
+    for (const { memberId } of kept.filter((a) => a.month === key)) {
+      counts.set(memberId, (counts.get(memberId) ?? 0) + 1);
+    }
+    const plan = planAssignments({
+      chores: activeChores(db).filter(
+        (c) => !kept.some((a) => a.choreId === c.id),
+      ),
+      housemates: [...housematesIn(roster).housemates].sort(byFloorThenName),
+      previous: lastAssigneesBefore(db, key),
+      alreadyGiven: counts,
+      random,
+    });
+    saveAssignments(db, key, plan.assignments);
+    return plan;
+  })();
+  return announce(db, { month, roster, skipped, reassigned: true });
+}
+
+/**
+ * Announces `month`'s open Assignments, Overdue ones included: the post for #chores, listing any `skipped` Chores,
+ * and a DM to each holder listing their own.
+ */
+function announce(
+  db: Database.Database,
+  {
+    month,
+    roster,
+    skipped,
+    reassigned,
+  }: {
+    month: Month;
+    roster: Roster;
+    skipped: readonly StoredChore[];
+    /** Whether an Admin handed the month out again, which the post and DMs say. */
+    reassigned: boolean;
+  },
+): Outbound[] {
+  const key = formatMonth(month);
+  const members = stayingMembersIn(roster);
   const monthName = nameMonth(month);
+  const heading = reassigned ? `${monthName}, reassigned` : monthName;
   const open = openAssignmentsThrough(db, key);
   const given = members
     .map((member) => ({
@@ -205,27 +278,36 @@ export function assignMonth(
       ].join("\n"),
     );
   }
-  if (sections.length === 0) sections.push("There are no active Chores.");
+  if (sections.length === 0) {
+    sections.push(
+      reassigned
+        ? "There are no open Assignments."
+        : "There are no active Chores.",
+    );
+  }
   const post: Post = {
     channel: "chores",
-    content: [`**Chores for ${monthName}**`, ...sections].join("\n\n"),
+    content: [`**Chores for ${heading}**`, ...sections].join("\n\n"),
   };
 
   const dms: Outbound[] = given.map(({ memberId, lines }) => ({
     memberId,
-    content: [`Your Chores for ${monthName}:`, ...lines].join("\n"),
+    content: [`Your Chores for ${heading}:`, ...lines].join("\n"),
     ifUndelivered: {
       channel: "chores",
       content: `Could not DM ${mention(memberId)} their Chores for ${monthName}. They are in the post above.`,
     },
   }));
 
-  const reports: Outbound[] = misconfigured.map(({ member, floors }) => ({
+  return [post, ...dms];
+}
+
+/** A report in #bot-admin for each member with several floor roles, who were given no new Chores for `month`. */
+function reportMisconfigured(roster: Roster, month: Month): Outbound[] {
+  return housematesIn(roster).misconfigured.map(({ member, floors }) => ({
     channel: "admin",
     content:
       `${mention(member.id)} has both the ${floorRoleNames(floors)} roles, ` +
-      `so they were given no new Chores for ${monthName}. Remove one of the roles to include them from next month.`,
+      `so they were given no new Chores for ${nameMonth(month)}. Remove one of the roles to include them from next month.`,
   }));
-
-  return [...(summary ? [summary] : []), post, ...dms, ...reports];
 }

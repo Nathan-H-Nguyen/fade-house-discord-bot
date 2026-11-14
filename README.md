@@ -5,25 +5,29 @@ The vocabulary (Housemate, Chore, Scope, Assignment and so on) is defined in [GL
 
 ## Commands
 
-| Command                              | Who        | What it does                                                     |
-| ------------------------------------ | ---------- | ---------------------------------------------------------------- |
-| `/ping`                              | Anyone     | Confirms the bot is connected.                                   |
-| `/chore add <name> <scope>`          | Housemates | Adds a Chore to the pool, with Scope Global, Floor 1 or Floor 3. |
-| `/chore edit <chore> [name] [scope]` | Housemates | Renames a Chore or changes its Scope.                            |
-| `/chore retire <chore>`              | Housemates | Takes a Chore out of the pool, keeping its history.              |
-| `/chore list`                        | Housemates | Lists the active Chores grouped by Scope.                        |
-| `/chore mine`                        | Housemates | Lists your open Assignments, Overdue ones marked, privately.     |
-| `/chore done <assignment>`           | Housemates | Marks one of your open Assignments complete.                     |
-| `/rent set <housemate> <amount>`     | Admins     | Sets a Housemate's monthly Rent, in dollars such as 1250.50.     |
-| `/rent list`                         | Housemates | Lists every Housemate's Rent, flagging any without one set.      |
-| `/rent paid`                         | Housemates | Marks your Rent paid for the current rent period.                |
+| Command                                        | Who        | What it does                                                                                |
+| ---------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------- |
+| `/ping`                                        | Anyone     | Confirms the bot is connected.                                                              |
+| `/chore add <name> <scope>`                    | Housemates | Adds a Chore to the pool, with Scope Global, Floor 1 or Floor 3.                            |
+| `/chore edit <chore> [name] [scope]`           | Housemates | Renames a Chore or changes its Scope.                                                       |
+| `/chore retire <chore>`                        | Housemates | Takes a Chore out of the pool, keeping its history.                                         |
+| `/chore list`                                  | Housemates | Lists the active Chores grouped by Scope.                                                   |
+| `/chore mine`                                  | Housemates | Lists your open Assignments, Overdue ones marked, privately.                                |
+| `/chore done <assignment>`                     | Housemates | Marks one of your open Assignments complete.                                                |
+| `/rent set <housemate> <amount>`               | Admins     | Sets a Housemate's monthly Rent, in dollars such as 1250.50.                                |
+| `/rent list`                                   | Housemates | Lists every Housemate's Rent, flagging any without one set.                                 |
+| `/rent paid`                                   | Housemates | Marks your Rent paid for the current rent period.                                           |
+| `/admin chore-done <housemate> <assignment>`   | Admins     | Marks a Housemate's open Assignment complete for them.                                      |
+| `/admin chore-reopen <housemate> <assignment>` | Admins     | Reopens an Assignment a Housemate completed this month.                                     |
+| `/admin rent-paid <housemate> [paid]`          | Admins     | Marks a Housemate's Rent paid, or with `paid: False` not paid, for the current rent period. |
+| `/admin reassign`                              | Admins     | Hands out this month's open new Assignments again (see Admin corrections).                  |
 
 Edit and retire suggest active Chores as you type.
 Done suggests only your own open Assignments, and posts a short completion message in #chores.
 Completing someone else's Assignment, or one already complete, is refused privately.
 Active Chore names must be unique, ignoring case.
 Changes to the pool apply from the next monthly run and never alter existing Assignments.
-Admins are Housemates with the Discord Administrator permission; anyone else using `/rent set` is refused privately.
+Admins are Housemates with the Discord Administrator permission; anyone else using `/rent set` or `/admin` is refused privately.
 Every Rent set or change is logged in #bot-admin, naming the Admin who made it.
 
 A Housemate is a member with exactly one of the `Floor 1` or `Floor 3` roles.
@@ -95,10 +99,30 @@ If the bot is off at 09:00, the day's reminder goes out when it comes back that 
 
 Marking Rent paid again before the next period starts is refused, naming when it starts.
 Once every Housemate with Rent set has paid for a period, the bot says so once in #chores.
-It does not wait on members who have left, but does wait on a member with both floor roles, who must have one removed before they can mark their Rent paid.
+It does not wait on members who have left, but does wait on a member with both floor roles, who must have one removed before they can mark their Rent paid themselves, or have an Admin mark it.
 `/rent list` shows, for the current period, who has paid, who has not and who is overdue.
 
 The bot tracks Rent from the first rent period that starts after it first runs: until then there are no Rent Reminders, and `/rent paid` is refused.
+
+## Admin corrections
+
+The `/admin` commands fix mistakes, and each one is logged in #bot-admin, naming the Admin who made it.
+Discord shows `/admin` only to members with the Administrator permission, unless the server's integration settings say otherwise.
+
+- `/admin chore-done` completes one of a Housemate's open Assignments, Overdue ones included, and posts the completion in #chores as `/chore done` does.
+  The `assignment` option suggests the chosen Housemate's open Assignments.
+- `/admin chore-reopen` reopens an Assignment the Housemate completed this month: one given this month, or an Overdue Assignment that stood in for its Chore this month.
+  A reopened Overdue Assignment is overdue again.
+  Assignments completed in earlier months cannot be reopened, since their Chores have been handed out again.
+- `/admin rent-paid` marks a Housemate's Rent paid or not paid for the current rent period, which works for a member with both floor roles too.
+  Marking the last unpaid Housemate paid posts the all-paid message in #chores; marking someone not paid afterwards does not withdraw it, and it is not posted again.
+  Rent Reminders resume for a Housemate marked not paid from the next day's 09:00 reminder.
+- `/admin reassign` corrects a bad monthly run, such as one where floor roles were wrong on the 1st.
+  It discards this month's Assignments that are neither completed nor Overdue, and hands their Chores out again with the server's roles as they are now, by the same rules as the monthly run.
+  Completed Assignments and Overdue Assignments are kept, and Assignments completed this month count toward balancing.
+  Chores added since the 1st are handed out too, and Chores retired since are not.
+  It posts the new Assignments in #chores and DMs each Housemate theirs, marked as reassigned.
+  It is refused until the month's Chores have been handed out.
 
 ## Backups
 

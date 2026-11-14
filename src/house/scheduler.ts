@@ -71,6 +71,21 @@ export function monthly(
   };
 }
 
+/** When `job` last completed its run for the period named `periodKey`, or undefined if it has not run for it. */
+export function completedRunAt(
+  db: Database.Database,
+  job: string,
+  periodKey: string,
+): Date | undefined {
+  const completedAt = db
+    .prepare<[string, string], string>(
+      "SELECT completed_at FROM job_runs WHERE job = ? AND period = ?",
+    )
+    .pluck()
+    .get(job, periodKey);
+  return completedAt === undefined ? undefined : new Date(completedAt);
+}
+
 /**
  * Runs every job whose current period is missing from the ledger, recording each once it completes,
  * so a job runs at most once per period across restarts.
