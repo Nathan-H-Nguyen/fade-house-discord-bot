@@ -31,9 +31,23 @@ import {
   parseDateTime,
 } from "./calendar.ts";
 import { openDatabase } from "./database.ts";
-import { resolveMember } from "./housemates.ts";
+import {
+  byFloorThenName,
+  floorRoleNames,
+  housematesIn,
+  resolveMember,
+} from "./housemates.ts";
 import { escapeMarkdown, mention } from "./markdown.ts";
 import { assignMonth } from "./monthly-run.ts";
+import {
+  formatDollars,
+  maxRentCents,
+  parseDollars,
+  rentLine,
+  rentOf,
+  rents,
+  setRent,
+} from "./rent.ts";
 import { daily, monthly, runDueJobs, type Job } from "./scheduler.ts";
 
 export { maxChoreNameLength, scopes, scopeLabels, type Scope };
@@ -68,6 +82,9 @@ export type Command =
   | { name: "chore retire"; choreName: string }
   /** `choreName` names one of the caller's open Assignments by its Chore, picked by autocomplete or typed in any case. */
   | { name: "chore done"; choreName: string }
+  /** Admin only. `amount` is in dollars, as typed. */
+  | { name: "rent set"; memberId: string; amount: string }
+  | { name: "rent list" }
   /** Test server only. */
   | { name: "dev now" }
   /** Test server only. `to` is a house time, as YYYY-MM-DD HH:MM. */
@@ -341,7 +358,7 @@ export function openHouse(options: {
           );
         case "several floors":
           return reply(
-            `You have both the ${resolution.floors.map((f) => `Floor ${String(f)}`).join(" and ")} roles, ` +
+            `You have both the ${floorRoleNames(resolution.floors)} roles, ` +
               "so you are not counted as a Housemate. Ask an Admin to remove one.",
           );
         case "housemate":
@@ -460,6 +477,70 @@ export function openHouse(options: {
               },
             ],
           };
+        }
+
+        case "rent set": {
+          if (!actor.isAdmin) {
+            return reply(
+              "Only Admins can set Rent. Ask someone with the Administrator permission.",
+            );
+          }
+          const target = resolveMember(roster, command.memberId);
+          if (target.kind === "no floor") {
+            return reply(
+              `${mention(command.memberId)} is not a Housemate. Give them the Floor 1 or Floor 3 role first.`,
+            );
+          }
+          if (target.kind === "several floors") {
+            return reply(
+              `${mention(command.memberId)} has both the ${floorRoleNames(target.floors)} roles, ` +
+                "so they are not counted as a Housemate. Remove one first.",
+            );
+          }
+          const cents = parseDollars(command.amount);
+          if (cents === undefined) {
+            return reply(
+              "Give the amount in dollars, such as 1250 or 1250.50.",
+            );
+          }
+          if (cents === 0) return reply("Rent must be more than $0.00.");
+          if (cents > maxRentCents) {
+            return reply(`Rent can be at most ${formatDollars(maxRentCents)}.`);
+          }
+          const previous = rentOf(db, command.memberId);
+          setRent(db, command.memberId, cents);
+          const isNew = previous === undefined;
+          const change =
+            `${mention(command.memberId)}'s Rent ` +
+            (isNew
+              ? `to ${formatDollars(cents)}`
+              : `from ${formatDollars(previous)} to ${formatDollars(cents)}`);
+          return {
+            reply: {
+              content: `${isNew ? "Set" : "Changed"} ${change}.`,
+              private: true,
+            },
+            // Rent changes what a Housemate owes, so every change is logged for the other Admins to see.
+            outbound: [
+              {
+                channel: "admin",
+                content: `${mention(actor.memberId)} ${isNew ? "set" : "changed"} ${change}.`,
+              },
+            ],
+          };
+        }
+
+        case "rent list": {
+          const amounts = rents(db);
+          const housemates = [...housematesIn(roster).housemates].sort(
+            byFloorThenName,
+          );
+          return reply(
+            [
+              "**Rent**",
+              ...housemates.map((h) => rentLine(h, amounts.get(h.member.id))),
+            ].join("\n"),
+          );
         }
       }
     },

@@ -92,6 +92,31 @@ const commands = [
             .setAutocomplete(true),
         ),
     ),
+
+  // Not limited with default member permissions, which would hide `/rent list` too; the House refuses non-Admins.
+  new SlashCommandBuilder()
+    .setName("rent")
+    .setDescription("See each Housemate's Rent, or set it as an Admin")
+    .addSubcommand((sub) =>
+      sub
+        .setName("set")
+        .setDescription("Set a Housemate's monthly Rent (Admins only)")
+        .addUserOption((option) =>
+          option
+            .setName("housemate")
+            .setDescription("Whose Rent to set")
+            .setRequired(true),
+        )
+        .addStringOption((option) =>
+          option
+            .setName("amount")
+            .setDescription("Monthly Rent in dollars, e.g. 1250 or 1250.50")
+            .setRequired(true),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub.setName("list").setDescription("List every Housemate's Rent"),
+    ),
 ];
 
 /** Test server only: commands for walking the bot through time. */
