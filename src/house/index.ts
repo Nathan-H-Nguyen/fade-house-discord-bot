@@ -28,7 +28,11 @@ import {
   formatDateTime,
   formatMonth,
   houseCalendar,
+  nameDay,
+  nameMonth,
+  nextMonth,
   parseDateTime,
+  type Month,
 } from "./calendar.ts";
 import { openDatabase } from "./database.ts";
 import {
@@ -40,14 +44,25 @@ import {
 import { escapeMarkdown, mention } from "./markdown.ts";
 import { assignMonth } from "./monthly-run.ts";
 import {
+  announceAllPaid,
+  dueDate,
   formatDollars,
+  hasRentPeriodStarted,
+  isRentOverdue,
   maxRentCents,
+  paidRent,
   parseDollars,
+  payRent,
   rentLine,
+  rentMonthAt,
   rentOf,
+  rentPeriodAt,
+  rentPeriodStart,
   rents,
   setRent,
+  startRentPeriod,
 } from "./rent.ts";
+import { remindOfRent } from "./rent-reminder.ts";
 import { daily, monthly, runDueJobs, type Job } from "./scheduler.ts";
 
 export { maxChoreNameLength, scopes, scopeLabels, type Scope };
@@ -85,6 +100,7 @@ export type Command =
   /** Admin only. `amount` is in dollars, as typed. */
   | { name: "rent set"; memberId: string; amount: string }
   | { name: "rent list" }
+  | { name: "rent paid" }
   /** Test server only. */
   | { name: "dev now" }
   /** Test server only. `to` is a house time, as YYYY-MM-DD HH:MM. */
@@ -216,6 +232,28 @@ export function openHouse(options: {
           }),
         ),
     },
+    // Starts each rent period before the day's Rent Reminders, which only go out for a started period.
+    {
+      name: "rent-period",
+      currentPeriod: rentPeriodAt,
+      run: (period) => {
+        startRentPeriod(db, period.key);
+        return Promise.resolve([]);
+      },
+    },
+    {
+      name: "rent-reminder",
+      currentPeriod: daily(9, 0),
+      run: (period, roster) =>
+        Promise.resolve(
+          remindOfRent(db, {
+            at: period.start,
+            today: calendar.toLocal(now()),
+            roster,
+            now: now(),
+          }),
+        ),
+    },
     {
       name: "backup",
       currentPeriod: daily(3, 0),
@@ -272,6 +310,11 @@ export function openHouse(options: {
   /** The current month in the house timezone, as YYYY-MM. */
   function currentMonth(): string {
     return formatMonth(calendar.toLocal(now()));
+  }
+
+  /** When the rent period for `month` starts, as Housemates read it, such as "November 27 at 09:00". */
+  function describeRentPeriodStart(month: Month): string {
+    return `${nameDay(rentPeriodStart(month))} at 09:00`;
   }
 
   function noSuchChore(name: string): CommandResult {
@@ -535,12 +578,70 @@ export function openHouse(options: {
           const housemates = [...housematesIn(roster).housemates].sort(
             byFloorThenName,
           );
+          const today = calendar.toLocal(now());
+          const month = rentMonthAt(today);
+          const key = formatMonth(month);
+          if (!hasRentPeriodStarted(db, key)) {
+            return reply(
+              [
+                "**Rent**",
+                ...housemates.map((h) => rentLine(h, amounts.get(h.member.id))),
+              ].join("\n"),
+            );
+          }
+          const paid = paidRent(db, key);
+          const overdue = isRentOverdue(month, today);
           return reply(
             [
-              "**Rent**",
-              ...housemates.map((h) => rentLine(h, amounts.get(h.member.id))),
+              `**Rent for ${nameMonth(month)}**, due ${nameDay(dueDate(month))}`,
+              ...housemates.map((h) =>
+                rentLine(
+                  h,
+                  amounts.get(h.member.id),
+                  paid.has(h.member.id)
+                    ? "paid"
+                    : overdue
+                      ? "overdue"
+                      : "not paid",
+                ),
+              ),
             ].join("\n"),
           );
+        }
+
+        case "rent paid": {
+          const month = rentMonthAt(calendar.toLocal(now()));
+          const key = formatMonth(month);
+          const monthName = nameMonth(month);
+          if (!hasRentPeriodStarted(db, key)) {
+            // The bot starts tracking Rent with the first period that starts after it is set up.
+            const next = nextMonth(month);
+            return reply(
+              `The first rent period, for ${nameMonth(next)}, starts on ${describeRentPeriodStart(next)}, ` +
+                "and you can mark your Rent paid then.",
+            );
+          }
+          if (rentOf(db, actor.memberId) === undefined) {
+            return reply(
+              "You have no Rent set. Ask an Admin to set it with /rent set.",
+            );
+          }
+          if (paidRent(db, key).has(actor.memberId)) {
+            const next = nextMonth(month);
+            return reply(
+              `You have already paid your Rent for ${monthName}. ` +
+                `The period for ${nameMonth(next)} starts on ${describeRentPeriodStart(next)}, and you can mark it paid then.`,
+            );
+          }
+          payRent(db, { memberId: actor.memberId, month: key }, now());
+          const allPaid = announceAllPaid(db, { month: key, roster }, now());
+          return {
+            reply: {
+              content: `Marked your Rent for ${monthName} paid.`,
+              private: true,
+            },
+            outbound: allPaid ? [allPaid] : [],
+          };
         }
       }
     },

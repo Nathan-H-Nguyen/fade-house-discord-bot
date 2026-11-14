@@ -306,6 +306,8 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
       };
     case "rent list":
       return { name: "rent list" };
+    case "rent paid":
+      return { name: "rent paid" };
     case "dev now":
       return { name: "dev now" };
     case "dev advance-to":

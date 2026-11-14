@@ -16,6 +16,7 @@ The vocabulary (Housemate, Chore, Scope, Assignment and so on) is defined in [GL
 | `/chore done <assignment>`           | Housemates | Marks one of your open Assignments complete.                     |
 | `/rent set <housemate> <amount>`     | Admins     | Sets a Housemate's monthly Rent, in dollars such as 1250.50.     |
 | `/rent list`                         | Housemates | Lists every Housemate's Rent, flagging any without one set.      |
+| `/rent paid`                         | Housemates | Marks your Rent paid for the current rent period.                |
 
 Edit and retire suggest active Chores as you type.
 Done suggests only your own open Assignments, and posts a short completion message in #chores.
@@ -34,6 +35,8 @@ Anyone else gets a private refusal explaining why.
 | ------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | Monthly assignment | The 1st, 00:05 house time                                 | Summarises the month just ended and hands out the new month's Chores (see Monthly assignment). |
 | Chore reminder     | 09:00 house time, 7 days before the last day of the month | DMs each Housemate their open Assignments (see Chore reminder).                                |
+| Rent period        | 09:00 house time, 3 days before the last day of the month | Starts the rent period for the coming month (see Rent).                                        |
+| Rent Reminder      | Daily, 09:00 house time                                   | DMs each Housemate who has not paid for the current rent period (see Rent).                    |
 | Backup             | Daily, 03:00 house time                                   | Posts a snapshot of the database in #bot-admin (see Backups).                                  |
 
 The bot checks for due jobs when it starts and about once a minute.
@@ -75,6 +78,25 @@ Housemates with nothing open get nothing, and so do members who have left.
 A member with both floor roles is reminded of the Assignments they keep.
 If a DM cannot be delivered, the bot posts the list in #chores instead, saying the DM failed.
 If the bot is off from before the reminder time until the month has ended, that month's reminder is skipped.
+
+## Rent
+
+Each rent period is named after the month the Rent is for, and starts at 09:00 house time three days before the end of the month before.
+December's period starts on November 27, and its Due Date is December 1.
+A period runs until the next one starts, so `/rent paid` always marks the latest period that has started.
+
+Every day at 09:00 from the start of the period, each Housemate with Rent set who has not marked it paid gets a Rent Reminder DM with their amount and the Due Date.
+After the Due Date the reminder says they are overdue.
+Reminders stop as soon as they mark it paid, or as soon as they stop being a Housemate, such as when their floor role is removed.
+A member with both floor roles is not reminded.
+If a DM cannot be delivered, the bot says so in #bot-admin.
+If the bot is off at 09:00, the day's reminder goes out when it comes back that day; a day missed entirely is not made up.
+
+Marking Rent paid again before the next period starts is refused, naming when it starts.
+Once every Housemate with Rent set has paid for a period, the bot says so once in #chores.
+`/rent list` shows, for the current period, who has paid, who has not and who is overdue.
+
+The bot tracks Rent from the first rent period that starts after it first runs: until then there are no Rent Reminders, and `/rent paid` is refused.
 
 ## Backups
 
@@ -136,7 +158,7 @@ It is ignored by git.
 | `DISCORD_TOKEN`          | Yes      | The bot token. Use the test bot's token while developing.                                         |
 | `DISCORD_APPLICATION_ID` | Yes      | The application ID, from the Developer Portal's General Information page.                         |
 | `DISCORD_GUILD_ID`       | Yes      | The server the bot runs in. Commands are registered and answered only there.                      |
-| `CHORES_CHANNEL_ID`      | Yes      | The #chores channel, for Assignment posts and completions.                                        |
+| `CHORES_CHANNEL_ID`      | Yes      | The #chores channel, for Assignment posts, completions and the all-paid Rent message.             |
 | `ADMIN_CHANNEL_ID`       | Yes      | The #bot-admin channel, for admin logs, warnings and backups.                                     |
 | `TIMEZONE`               | No       | The house's IANA timezone, which defines months and job times. Defaults to `America/Los_Angeles`. |
 | `IS_TEST_SERVER`         | No       | `true` only in the test server, to enable the `/dev` commands. Defaults to `false`.               |
@@ -167,7 +189,7 @@ With `IS_TEST_SERVER=true`, the bot registers two extra commands for walking thr
 The bot's time keeps running from where it was moved to, and only moves forward.
 It goes back to the real time when the bot restarts.
 Jobs that ran for days you moved past are then skipped when those days really arrive, so use a throwaway database for the walk-through.
-For example, `/dev advance-to 2026-11-13 03:00` posts that day's backup in #bot-admin, and `/dev advance-to 2026-12-01 00:05` hands out December's Chores.
+For example, `/dev advance-to 2026-11-13 03:00` posts that day's backup in #bot-admin, `/dev advance-to 2026-11-27 09:00` sends the first Rent Reminders for December, and `/dev advance-to 2026-12-01 00:05` hands out December's Chores.
 Outside the test server these commands are not registered, and the House refuses them.
 
 CI runs the typecheck, lint and tests on every push and pull request.

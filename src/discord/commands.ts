@@ -96,7 +96,7 @@ const commands = [
   // Not limited with default member permissions, which would hide `/rent list` too; the House refuses non-Admins.
   new SlashCommandBuilder()
     .setName("rent")
-    .setDescription("See each Housemate's Rent, or set it as an Admin")
+    .setDescription("See and pay Rent, or set it as an Admin")
     .addSubcommand((sub) =>
       sub
         .setName("set")
@@ -115,7 +115,14 @@ const commands = [
         ),
     )
     .addSubcommand((sub) =>
-      sub.setName("list").setDescription("List every Housemate's Rent"),
+      sub
+        .setName("list")
+        .setDescription("List every Housemate's Rent and who has paid"),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("paid")
+        .setDescription("Mark your Rent paid for the current period"),
     ),
 ];
 

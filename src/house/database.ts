@@ -47,6 +47,19 @@ const migrations: readonly string[] = [
     housemate_id TEXT PRIMARY KEY,
     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0)
   ) STRICT`,
+  // Each rent period the bot has started, named by the month (YYYY-MM) the Rent is for,
+  // with when everyone with Rent had paid for it, or null until then.
+  `CREATE TABLE rent_periods (
+    month TEXT PRIMARY KEY,
+    all_paid_at TEXT
+  ) STRICT`,
+  // Each Housemate's Rent marked paid for a rent period.
+  `CREATE TABLE rent_payments (
+    month TEXT NOT NULL REFERENCES rent_periods (month),
+    housemate_id TEXT NOT NULL,
+    paid_at TEXT NOT NULL,
+    PRIMARY KEY (month, housemate_id)
+  ) STRICT`,
 ];
 
 /** Opens the database at `path` (or `:memory:`) and brings its schema up to date. */

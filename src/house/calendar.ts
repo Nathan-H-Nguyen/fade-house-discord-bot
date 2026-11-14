@@ -116,6 +116,13 @@ export function previousMonth({ year, month }: Month): Month {
     : { year, month: month - 1 };
 }
 
+/** The calendar month after `month`. */
+export function nextMonth({ year, month }: Month): Month {
+  return month === 12
+    ? { year: year + 1, month: 1 }
+    : { year, month: month + 1 };
+}
+
 /** The last day of `month`, such as 28 for February 2027. */
 export function lastDay({ year, month }: Month): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -142,4 +149,17 @@ const monthNames = new Intl.DateTimeFormat("en-US", {
 /** Names a month as Housemates read it, such as "December 2026". */
 export function nameMonth(month: Month): string {
   return monthNames.format(new Date(Date.UTC(month.year, month.month - 1, 1)));
+}
+
+const dayNames = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
+  month: "long",
+  day: "numeric",
+});
+
+/** Names a date as Housemates read it, such as "December 1". */
+export function nameDay(date: LocalDate): string {
+  return dayNames.format(
+    new Date(Date.UTC(date.year, date.month - 1, date.day)),
+  );
 }

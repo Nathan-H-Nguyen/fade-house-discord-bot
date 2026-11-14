@@ -35,7 +35,7 @@ test("/chore done takes an autocompleted Assignment, and /chore mine takes nothi
   });
 });
 
-test("/rent set takes a member and a dollar amount, and /rent list takes nothing", () => {
+test("/rent set takes a member and a dollar amount, and /rent list and /rent paid take nothing", () => {
   const rent = commandDefinitions({ isTestServer: false }).find(
     (c) => c.name === "rent",
   );
@@ -58,5 +58,6 @@ test("/rent set takes a member and a dollar amount, and /rent list takes nothing
       ],
     },
     { name: "list", options: [] },
+    { name: "paid", options: [] },
   ]);
 });
