@@ -206,6 +206,16 @@ export function payRent(
   ).run(period.key, memberId, at.toISOString());
 }
 
+/** Removes a member's payment for `period`, so they owe its Rent again. */
+export function unpayRent(
+  db: Database.Database,
+  { memberId, period }: { memberId: string; period: RentPeriod },
+): void {
+  db.prepare(
+    "DELETE FROM rent_payments WHERE month = ? AND housemate_id = ?",
+  ).run(period.key, memberId);
+}
+
 /**
  * The first time every member in the roster with Rent who has not left has paid for `period`,
  * records it and returns the post for #chores saying so; otherwise undefined.

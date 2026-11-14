@@ -147,18 +147,28 @@ export function createTestHouse({
       return house.tick(members);
     },
 
-    /** Runs a slash command as the named member, who is not an Admin unless stated. */
-    run(as: MemberName, command: Command, { isAdmin = false } = {}) {
+    /**
+     * Runs a slash command as the named member, who is not an Admin unless stated,
+     * with the roster fixture unless given another.
+     */
+    run(
+      as: MemberName,
+      command: Command,
+      {
+        isAdmin = false,
+        members = roster,
+      }: { isAdmin?: boolean; members?: Roster } = {},
+    ) {
       return house.handle({
         actor: actorOf(as, isAdmin),
-        roster,
+        roster: members,
         command,
       });
     },
 
-    /** Asks for autocomplete suggestions as the named member types into an option. */
-    suggest(as: MemberName, field: SuggestionField) {
-      return house.suggest({ actor: actorOf(as), roster, field });
+    /** Asks for autocomplete suggestions as the named member, who is not an Admin unless stated, types into an option. */
+    suggest(as: MemberName, field: SuggestionField, { isAdmin = false } = {}) {
+      return house.suggest({ actor: actorOf(as, isAdmin), roster, field });
     },
   };
 }

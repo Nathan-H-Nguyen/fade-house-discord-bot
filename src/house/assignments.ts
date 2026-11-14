@@ -49,9 +49,10 @@ function handOut(
   chores: readonly StoredChore[],
   housemates: readonly Housemate[],
   previous: ReadonlyMap<number, string>,
+  alreadyGiven: ReadonlyMap<string, number>,
   random: Random,
 ): Assignment[] {
-  const counts = new Map<string, number>();
+  const counts = new Map(alreadyGiven);
   const count = (h: Housemate) => counts.get(h.member.id) ?? 0;
 
   // Hand out the Chores with the fewest eligible Housemates first, so the wider Scopes can even out the totals.
@@ -79,9 +80,12 @@ function handOut(
   });
 }
 
-/** How uneven the Assignment counts are: the sum of each Housemate's count squared. */
-function unevenness(assignments: readonly Assignment[]): number {
-  const counts = new Map<string, number>();
+/** How uneven the Assignment counts are, counting `alreadyGiven` ones too: the sum of each Housemate's count squared. */
+function unevenness(
+  assignments: readonly Assignment[],
+  alreadyGiven: ReadonlyMap<string, number>,
+): number {
+  const counts = new Map(alreadyGiven);
   for (const { memberId } of assignments) {
     counts.set(memberId, (counts.get(memberId) ?? 0) + 1);
   }
@@ -101,12 +105,15 @@ export function planAssignments({
   chores,
   housemates,
   previous,
+  alreadyGiven = new Map(),
   random,
 }: {
   chores: readonly StoredChore[];
   housemates: readonly Housemate[];
   /** Last month's assignee of each Chore, by Chore id. */
   previous: ReadonlyMap<number, string>;
+  /** How many new Assignments each Housemate already has this month, by member ID, which count toward the balance. */
+  alreadyGiven?: ReadonlyMap<string, number>;
   random: Random;
 }): { assignments: Assignment[]; skipped: StoredChore[] } {
   const skipped = chores.filter(
@@ -117,8 +124,14 @@ export function planAssignments({
   let best: Assignment[] = [];
   let bestUnevenness = Infinity;
   for (let i = 0; i < passes; i++) {
-    const assignments = handOut(assignable, housemates, previous, random);
-    const score = unevenness(assignments);
+    const assignments = handOut(
+      assignable,
+      housemates,
+      previous,
+      alreadyGiven,
+      random,
+    );
+    const score = unevenness(assignments, alreadyGiven);
     if (score < bestUnevenness) {
       best = assignments;
       bestUnevenness = score;
@@ -221,6 +234,24 @@ export function openAssignmentsThrough(
   return selectAssignments(db, `${openClause} AND month <= ?`, month);
 }
 
+/**
+ * The Assignments that make up `month` (YYYY-MM), oldest month first: those given in it,
+ * and the Overdue Assignments that stood in for their Chores when it was handed out at `handedOutAt`,
+ * which are those still open or completed since.
+ */
+export function assignmentsOfMonth(
+  db: Database.Database,
+  { month, handedOutAt }: { month: string; handedOutAt: Date },
+): StoredAssignment[] {
+  return selectAssignments(
+    db,
+    `month = ? OR (month < ? AND (${openClause} OR completed_at >= ?))`,
+    month,
+    month,
+    handedOutAt.toISOString(),
+  );
+}
+
 /** The Assignments completed at or after `since`, oldest month first. */
 export function completedSince(
   db: Database.Database,
@@ -280,6 +311,21 @@ export function completeAssignment(
   db.prepare(
     `UPDATE assignments SET completed_at = ? WHERE id = ? AND ${openClause}`,
   ).run(completedAt.toISOString(), id);
+}
+
+/** Deletes the open Assignments given in `month` (YYYY-MM), so their Chores can be handed out again. */
+export function discardOpenAssignments(
+  db: Database.Database,
+  month: string,
+): void {
+  db.prepare(`DELETE FROM assignments WHERE month = ? AND ${openClause}`).run(
+    month,
+  );
+}
+
+/** Marks a completed Assignment open again. */
+export function reopenAssignment(db: Database.Database, id: number): void {
+  db.prepare("UPDATE assignments SET completed_at = NULL WHERE id = ?").run(id);
 }
 
 /** Drops open Overdue Assignments, so they no longer stand in for their Chores. */

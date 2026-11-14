@@ -20,6 +20,7 @@ import {
   type Post,
   type Roster,
   type Scope,
+  type SuggestionField,
 } from "../house/index.ts";
 import { commandDefinitions } from "./commands.ts";
 import { splitMessage } from "./messages.ts";
@@ -227,15 +228,39 @@ async function handleAutocomplete(
     await interaction.respond([]);
     return;
   }
-  const suggestions = house.suggest({
-    actor: actorOf(interaction),
-    roster: rosterOf(guild),
-    field: { name: focused.name, text: focused.value },
-  });
+  const field = suggestionField(interaction, focused.name, focused.value);
+  const suggestions = field
+    ? house.suggest({
+        actor: actorOf(interaction),
+        roster: rosterOf(guild),
+        field,
+      })
+    : [];
 
   await interaction.respond(
     suggestions.map((s) => ({ name: s.label, value: s.value })),
   );
+}
+
+/**
+ * The House field for a focused `chore` or `assignment` option. In /admin, the Assignment belongs to the chosen
+ * Housemate, so there is none to suggest until one is chosen.
+ */
+function suggestionField(
+  interaction: AutocompleteInteraction,
+  name: "chore" | "assignment",
+  text: string,
+): SuggestionField | undefined {
+  if (interaction.commandName !== "admin") return { name, text };
+  // Autocomplete carries a chosen user as their ID, without resolving them.
+  const memberId = interaction.options.get("housemate")?.value;
+  if (typeof memberId !== "string") return undefined;
+  return {
+    name: "assignment of",
+    memberId,
+    completed: interaction.options.getSubcommand() === "chore-reopen",
+    text,
+  };
 }
 
 function actorOf(
@@ -308,6 +333,21 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
       return { name: "rent list" };
     case "rent paid":
       return { name: "rent paid" };
+    case "admin chore-done":
+    case "admin chore-reopen":
+      return {
+        name,
+        memberId: interaction.options.getUser("housemate", true).id,
+        choreName: interaction.options.getString("assignment", true),
+      };
+    case "admin rent-paid":
+      return {
+        name,
+        memberId: interaction.options.getUser("housemate", true).id,
+        paid: interaction.options.getBoolean("paid") ?? true,
+      };
+    case "admin reassign":
+      return { name };
     case "dev now":
       return { name: "dev now" };
     case "dev advance-to":

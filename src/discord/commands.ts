@@ -1,4 +1,8 @@
-import { SlashCommandBuilder } from "discord.js";
+import {
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+  type SlashCommandSubcommandBuilder,
+} from "discord.js";
 import type { Config } from "../config.ts";
 import { maxChoreNameLength, scopeLabels, scopes } from "../house/index.ts";
 
@@ -124,7 +128,82 @@ const commands = [
         .setName("paid")
         .setDescription("Mark your Rent paid for the current period"),
     ),
+
+  // Hidden from members without the Administrator permission unless the server says otherwise;
+  // the House refuses non-Admins either way.
+  new SlashCommandBuilder()
+    .setName("admin")
+    .setDescription("Correct Housemates' records (Admins only)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addSubcommand((sub) =>
+      addAssignmentOptions(
+        sub
+          .setName("chore-done")
+          .setDescription("Mark a Housemate's Assignment complete for them"),
+        "Whose Assignment to complete",
+        "The open Assignment to complete",
+      ),
+    )
+    .addSubcommand((sub) =>
+      addAssignmentOptions(
+        sub
+          .setName("chore-reopen")
+          .setDescription(
+            "Reopen an Assignment a Housemate completed this month",
+          ),
+        "Whose Assignment to reopen",
+        "The completed Assignment to reopen",
+      ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("rent-paid")
+        .setDescription(
+          "Mark a Housemate's Rent paid, or not paid, for the current period",
+        )
+        .addUserOption((option) =>
+          option
+            .setName("housemate")
+            .setDescription("Whose Rent to mark")
+            .setRequired(true),
+        )
+        .addBooleanOption((option) =>
+          option
+            .setName("paid")
+            .setDescription("False to mark it not paid (true if left out)"),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("reassign")
+        .setDescription(
+          "Hand out this month's open new Assignments again, keeping completed and Overdue ones",
+        ),
+    ),
 ];
+
+/** Adds the Housemate and their autocompleted Assignment, which the Assignment's suggestions depend on. */
+function addAssignmentOptions(
+  sub: SlashCommandSubcommandBuilder,
+  housemateDescription: string,
+  assignmentDescription: string,
+): SlashCommandSubcommandBuilder {
+  return sub
+    .addUserOption((option) =>
+      option
+        .setName("housemate")
+        .setDescription(housemateDescription)
+        .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("assignment")
+        .setDescription(assignmentDescription)
+        .setRequired(true)
+        .setMaxLength(maxChoreNameLength)
+        .setAutocomplete(true),
+    );
+}
 
 /** Test server only: commands for walking the bot through time. */
 const devCommand = new SlashCommandBuilder()

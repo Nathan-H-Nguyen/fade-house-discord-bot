@@ -10,6 +10,7 @@ import {
   foldChoreName,
   maxChoreNameLength,
   retireChore,
+  sameChoreName,
   scopeLabels,
   scopes,
   updateChore,
@@ -17,10 +18,13 @@ import {
 } from "./chores.ts";
 import {
   assignmentLine,
+  assignmentsOfMonth,
   completeAssignment,
   findAssignment,
   openAssignmentsOf,
+  reopenAssignment,
   type Random,
+  type StoredAssignment,
 } from "./assignments.ts";
 import { backUp } from "./backup.ts";
 import { reminderDay, remindOfChores } from "./chore-reminder.ts";
@@ -40,7 +44,7 @@ import {
   resolveMember,
 } from "./housemates.ts";
 import { escapeMarkdown, mention } from "./markdown.ts";
-import { assignMonth } from "./monthly-run.ts";
+import { assignMonth, reassignMonth } from "./monthly-run.ts";
 import {
   formatDollars,
   hasRentPeriodStarted,
@@ -59,9 +63,16 @@ import {
   rents,
   setRent,
   startRentPeriod,
+  unpayRent,
 } from "./rent.ts";
 import { remindOfRent } from "./rent-reminder.ts";
-import { daily, monthly, runDueJobs, type Job } from "./scheduler.ts";
+import {
+  completedRunAt,
+  daily,
+  monthly,
+  runDueJobs,
+  type Job,
+} from "./scheduler.ts";
 
 export { maxChoreNameLength, scopes, scopeLabels, type Scope };
 
@@ -99,6 +110,14 @@ export type Command =
   | { name: "rent set"; memberId: string; amount: string }
   | { name: "rent list" }
   | { name: "rent paid" }
+  /** Admin only. Completes one of `memberId`'s open Assignments, named by its Chore, on their behalf. */
+  | { name: "admin chore-done"; memberId: string; choreName: string }
+  /** Admin only. Reopens one of `memberId`'s Assignments completed this month, named by its Chore. */
+  | { name: "admin chore-reopen"; memberId: string; choreName: string }
+  /** Admin only. Marks `memberId`'s Rent for the current rent period paid, or not paid. */
+  | { name: "admin rent-paid"; memberId: string; paid: boolean }
+  /** Admin only. Discards this month's open new Assignments and hands their Chores out again. */
+  | { name: "admin reassign" }
   /** Test server only. */
   | { name: "dev now" }
   /** Test server only. `to` is a house time, as YYYY-MM-DD HH:MM. */
@@ -139,14 +158,19 @@ export interface CommandResult {
   outbound: Outbound[];
 }
 
-/**
- * An option the caller is filling in, with the text typed so far:
- * an active Chore, or one of the caller's open Assignments.
- */
-export interface SuggestionField {
-  name: "chore" | "assignment";
-  text: string;
-}
+/** An option the caller is filling in, with the text typed so far. */
+export type SuggestionField =
+  /** An active Chore. */
+  | { name: "chore"; text: string }
+  /** One of the caller's open Assignments. */
+  | { name: "assignment"; text: string }
+  /** Admins only: one of `memberId`'s open Assignments, or with `completed`, one they completed this month. */
+  | {
+      name: "assignment of";
+      memberId: string;
+      completed: boolean;
+      text: string;
+    };
 
 /** One autocomplete choice: what the Housemate sees, and what the command receives. */
 export interface Suggestion {
@@ -203,9 +227,11 @@ export function openHouse(options: {
 
   const random = options.random ?? Math.random;
 
+  const monthlyAssignment = "monthly-assignment";
+
   const jobs: Job[] = [
     {
-      name: "monthly-assignment",
+      name: monthlyAssignment,
       currentPeriod: monthly(0, 5),
       run: (period, roster) =>
         Promise.resolve(
@@ -310,6 +336,27 @@ export function openHouse(options: {
     return formatMonth(calendar.toLocal(now()));
   }
 
+  /** This month's Assignments, Overdue ones standing in included, or none if they have not been handed out yet. */
+  function assignmentsThisMonth(): StoredAssignment[] {
+    const month = currentMonth();
+    const handedOutAt = completedRunAt(db, monthlyAssignment, month);
+    return handedOutAt ? assignmentsOfMonth(db, { month, handedOutAt }) : [];
+  }
+
+  /** The Assignments an Assignment field offers. */
+  function suggestibleAssignments(
+    actor: Actor,
+    field: Exclude<SuggestionField, { name: "chore" }>,
+  ): StoredAssignment[] {
+    if (field.name === "assignment") {
+      return openAssignmentsOf(db, actor.memberId);
+    }
+    if (!field.completed) return openAssignmentsOf(db, field.memberId);
+    return assignmentsThisMonth().filter(
+      (a) => a.memberId === field.memberId && a.completedAt,
+    );
+  }
+
   function noSuchChore(name: string): CommandResult {
     return reply(`There is no active Chore named ${escapeMarkdown(name)}.`);
   }
@@ -324,11 +371,12 @@ export function openHouse(options: {
 
     suggest({ actor, roster, field }) {
       if (resolveMember(roster, actor.memberId).kind !== "housemate") return [];
+      if (field.name === "assignment of" && !actor.isAdmin) return [];
       const text = foldChoreName(field.text.trim());
       const options =
         field.name === "chore"
           ? activeChores(db)
-          : openAssignmentsOf(db, actor.memberId).map((a) => ({
+          : suggestibleAssignments(actor, field).map((a) => ({
               name: a.choreName,
               scope: a.choreScope,
             }));
@@ -399,6 +447,12 @@ export function openHouse(options: {
           );
         case "housemate":
           break;
+      }
+
+      if (command.name.startsWith("admin ") && !actor.isAdmin) {
+        return reply(
+          "Only Admins can use /admin. Ask someone with the Administrator permission.",
+        );
       }
 
       switch (command.name) {
@@ -562,6 +616,148 @@ export function openHouse(options: {
                 channel: "admin",
                 content: `${mention(actor.memberId)} ${isNew ? "set" : "changed"} ${change}.`,
               },
+            ],
+          };
+        }
+
+        case "admin chore-done": {
+          const choreName = command.choreName.trim();
+          const holder = mention(command.memberId);
+          const assignment = openAssignmentsOf(db, command.memberId).find((a) =>
+            sameChoreName(a.choreName, choreName),
+          );
+          if (!assignment) {
+            const completed = assignmentsThisMonth().find(
+              (a) =>
+                a.memberId === command.memberId &&
+                a.completedAt &&
+                sameChoreName(a.choreName, choreName),
+            );
+            return reply(
+              completed
+                ? `${holder} has already completed ${escapeMarkdown(completed.choreName)}.`
+                : `${holder} has no open Assignment named ${escapeMarkdown(choreName)}.`,
+            );
+          }
+          const name = escapeMarkdown(assignment.choreName);
+          completeAssignment(db, assignment.id, now());
+          return {
+            reply: {
+              content: `Marked ${holder}'s ${name} complete.`,
+              private: true,
+            },
+            outbound: [
+              { channel: "chores", content: `${holder} completed ${name}.` },
+              {
+                channel: "admin",
+                content: `${mention(actor.memberId)} marked ${holder}'s ${name} complete.`,
+              },
+            ],
+          };
+        }
+
+        case "admin chore-reopen": {
+          const choreName = command.choreName.trim();
+          const holder = mention(command.memberId);
+          const named = (a: StoredAssignment) =>
+            a.memberId === command.memberId &&
+            sameChoreName(a.choreName, choreName);
+          const assignment = assignmentsThisMonth()
+            .filter((a) => a.completedAt)
+            .findLast(named);
+          if (!assignment) {
+            const open = openAssignmentsOf(db, command.memberId).find(named);
+            return reply(
+              open
+                ? `${holder}'s ${escapeMarkdown(open.choreName)} is not complete.`
+                : `${holder} has completed no Assignment named ${escapeMarkdown(choreName)} this month.`,
+            );
+          }
+          const name = escapeMarkdown(assignment.choreName);
+          reopenAssignment(db, assignment.id);
+          return {
+            reply: { content: `Reopened ${holder}'s ${name}.`, private: true },
+            outbound: [
+              {
+                channel: "admin",
+                content: `${mention(actor.memberId)} reopened ${holder}'s ${name}.`,
+              },
+            ],
+          };
+        }
+
+        case "admin rent-paid": {
+          const period = rentPeriodAt(calendar.toLocal(now()));
+          const monthName = nameMonth(period.month);
+          const holder = mention(command.memberId);
+          if (!hasRentPeriodStarted(db, period)) {
+            const next = nextRentPeriod(period);
+            return reply(
+              `The first rent period, for ${nameMonth(next.month)}, starts on ${nameRentPeriodStart(next)}, ` +
+                "and Rent can be marked paid then.",
+            );
+          }
+          if (rentOf(db, command.memberId) === undefined) {
+            return reply(
+              `${holder} has no Rent set. Set it with /rent set first.`,
+            );
+          }
+          const hasPaid = paidRent(db, period).has(command.memberId);
+          if (command.paid && hasPaid) {
+            return reply(
+              `${holder} has already paid their Rent for ${monthName}.`,
+            );
+          }
+          if (!command.paid && !hasPaid) {
+            return reply(`${holder} has not paid their Rent for ${monthName}.`);
+          }
+          const change = `${holder}'s Rent for ${monthName} ${command.paid ? "paid" : "not paid"}`;
+          const log: Post = {
+            channel: "admin",
+            content: `${mention(actor.memberId)} marked ${change}.`,
+          };
+          if (!command.paid) {
+            unpayRent(db, { memberId: command.memberId, period });
+            return {
+              reply: { content: `Marked ${change}.`, private: true },
+              outbound: [log],
+            };
+          }
+          payRent(db, { memberId: command.memberId, period }, now());
+          const allPaid = markAllPaid(db, { period, roster }, now());
+          return {
+            reply: { content: `Marked ${change}.`, private: true },
+            outbound: allPaid ? [log, allPaid] : [log],
+          };
+        }
+
+        case "admin reassign": {
+          const today = calendar.toLocal(now());
+          const month = currentMonth();
+          const monthName = nameMonth(today);
+          const handedOutAt = completedRunAt(db, monthlyAssignment, month);
+          if (!handedOutAt) {
+            return reply(
+              `The Chores for ${monthName} have not been handed out yet, so there is nothing to reassign.`,
+            );
+          }
+          const announcement = reassignMonth(db, {
+            month: today,
+            handedOutAt,
+            roster,
+            random,
+          });
+          return {
+            reply: {
+              content: `Reassigned the Chores for ${monthName}.`,
+              private: true,
+            },
+            outbound: [
+              {
+                channel: "admin",
+                content: `${mention(actor.memberId)} reassigned the Chores for ${monthName}.`,
+              },
+              ...announcement,
             ],
           };
         }
