@@ -23,6 +23,7 @@ Completing someone else's Assignment, or one already complete, is refused privat
 Active Chore names must be unique, ignoring case.
 Changes to the pool apply from the next monthly run and never alter existing Assignments.
 Admins are Housemates with the Discord Administrator permission; anyone else using `/rent set` is refused privately.
+Every Rent set or change is logged in #bot-admin, naming the Admin who made it.
 
 A Housemate is a member with exactly one of the `Floor 1` or `Floor 3` roles.
 Anyone else gets a private refusal explaining why.

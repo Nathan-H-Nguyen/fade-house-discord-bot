@@ -509,12 +509,25 @@ export function openHouse(options: {
           }
           const previous = rentOf(db, command.memberId);
           setRent(db, command.memberId, cents);
-          const who = `${mention(command.memberId)}'s Rent`;
-          return reply(
-            previous === undefined
-              ? `Set ${who} to ${formatDollars(cents)}.`
-              : `Changed ${who} from ${formatDollars(previous)} to ${formatDollars(cents)}.`,
-          );
+          const isNew = previous === undefined;
+          const change =
+            `${mention(command.memberId)}'s Rent ` +
+            (isNew
+              ? `to ${formatDollars(cents)}`
+              : `from ${formatDollars(previous)} to ${formatDollars(cents)}`);
+          return {
+            reply: {
+              content: `${isNew ? "Set" : "Changed"} ${change}.`,
+              private: true,
+            },
+            // Rent changes what a Housemate owes, so every change is logged for the other Admins to see.
+            outbound: [
+              {
+                channel: "admin",
+                content: `${mention(actor.memberId)} ${isNew ? "set" : "changed"} ${change}.`,
+              },
+            ],
+          };
         }
 
         case "rent list": {

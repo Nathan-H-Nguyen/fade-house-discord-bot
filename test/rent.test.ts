@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createTestHouse } from "./harness.ts";
+import { createTestHouse, postsIn } from "./harness.ts";
 
 test("an Admin sets a Housemate's Rent in dollars, and the list shows it with everyone else flagged", async () => {
   const house = createTestHouse();
@@ -48,6 +48,29 @@ test("a Housemate without the Administrator permission is privately refused and 
   expect(
     (await house.run("Alice", { name: "rent list" })).reply.content,
   ).toContain("- <@1001> (Floor 1): **no Rent set**");
+});
+
+test("setting and changing Rent is logged in #bot-admin with who did it", async () => {
+  const house = createTestHouse();
+
+  const set = await house.run(
+    "Alice",
+    { name: "rent set", memberId: "3002", amount: "900" },
+    { isAdmin: true },
+  );
+  const changed = await house.run(
+    "Chloe",
+    { name: "rent set", memberId: "3002", amount: "950" },
+    { isAdmin: true },
+  );
+
+  expect(set.outbound).toEqual([
+    { channel: "admin", content: "<@1001> set <@3002>'s Rent to $900.00." },
+  ]);
+  expect(postsIn(changed.outbound, "admin")).toEqual([
+    "<@3001> changed <@3002>'s Rent from $900.00 to $950.00.",
+  ]);
+  expect(postsIn(changed.outbound, "chores")).toEqual([]);
 });
 
 test("an Admin changes a Housemate's Rent, and the reply says what it was", async () => {
