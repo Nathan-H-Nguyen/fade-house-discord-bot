@@ -1,9 +1,10 @@
 import { expect, test } from "vitest";
-import { helpText } from "../src/discord/commands.ts";
+import { commandDefinitions, helpText } from "../src/discord/commands.ts";
+import type { Command } from "../src/house/index.ts";
 import { createTestHouse } from "./harness.ts";
 
 test("/help lists every user command with its options, grouped under Chores, Rent and Other", () => {
-  expect(helpText({ isTestServer: false })).toBe(
+  expect(helpText()).toBe(
     [
       "**Chores**",
       "`/chore add <name> <scope>`: Add a Chore to the pool",
@@ -24,15 +25,60 @@ test("/help lists every user command with its options, grouped under Chores, Ren
   );
 });
 
-test.each([false, true])(
-  "/help never lists /admin, /dev or /rent set (test server: %s)",
-  (isTestServer) => {
-    const text = helpText({ isTestServer });
+/** The commands `/help` lists, by the name it shows them under. */
+function listedCommands(): string[] {
+  return [...helpText().matchAll(/^`\/([a-z-]+(?: [a-z-]+)?)[ `]/gm)].map(
+    ([, name]) => name ?? "",
+  );
+}
 
-    expect(text).not.toMatch(/\/admin|\/dev|\/rent set/);
-    expect(text).toBe(helpText({ isTestServer: false }));
-  },
-);
+test("/help leaves out every command registered for Admins only, and the test server's /dev", () => {
+  const hidden = commandDefinitions({ isTestServer: true }).filter(
+    (command) =>
+      command.default_member_permissions != null || command.name === "dev",
+  );
+
+  expect(hidden.map((command) => command.name)).toEqual(["admin", "dev"]);
+  for (const { name } of hidden) {
+    expect(listedCommands().some((listed) => listed.startsWith(name))).toBe(
+      false,
+    );
+  }
+});
+
+/** A Housemate's use of each command, to check that none of those `/help` lists is for Admins only. */
+const samples: Record<string, Command> = {
+  "chore add": { name: "chore add", choreName: "Kitchen", scope: "global" },
+  "chore edit": { name: "chore edit", choreName: "Kitchen", newName: "Sink" },
+  "chore retire": { name: "chore retire", choreName: "Sink" },
+  "chore list": { name: "chore list" },
+  "chore mine": { name: "chore mine" },
+  "chore done": { name: "chore done", choreName: "Sink" },
+  "rent list": { name: "rent list" },
+  "rent paid": { name: "rent paid" },
+  ping: { name: "ping" },
+  help: { name: "help" },
+};
+
+test("every command /help lists works for a Housemate who is not an Admin", async () => {
+  const house = createTestHouse();
+  const adminRefusal = /Only Admins/;
+  // The refusal this test looks for, so it cannot pass by looking for the wrong one.
+  const rentSet = await house.run("Alice", {
+    name: "rent set",
+    memberId: "1001",
+    amount: "1000",
+  });
+  expect(rentSet.reply.content).toMatch(adminRefusal);
+
+  for (const name of listedCommands()) {
+    const sample = samples[name];
+    expect(sample, `no sample for /${name}`).toBeDefined();
+    if (!sample) continue;
+    const result = await house.run("Alice", sample);
+    expect(result.reply.content, `/${name}`).not.toMatch(adminRefusal);
+  }
+});
 
 test.each(["Alice", "Guest"] as const)(
   "/help answers %s privately, Housemate or not",
@@ -41,10 +87,7 @@ test.each(["Alice", "Guest"] as const)(
 
     const result = await house.run(as, { name: "help" });
 
-    expect(result.reply).toEqual({
-      content: helpText({ isTestServer: false }),
-      private: true,
-    });
+    expect(result.reply).toEqual({ content: helpText(), private: true });
     expect(result.outbound).toEqual([]);
   },
 );

@@ -14,7 +14,7 @@ const house = openHouse({
   // Discord's limit for bots in a server without boosts.
   attachmentLimitBytes: 10 * 1024 * 1024,
   isTestServer: config.isTestServer,
-  helpText: helpText(config),
+  helpText: helpText(),
 });
 
 await registerCommands(config);

@@ -240,41 +240,46 @@ export function commandDefinitions({
   );
 }
 
-/** Commands and subcommands left out of `/help`, because only Admins or the test server can use them. */
-const notInHelp = new Set(["rent set", "admin", "dev"]);
+/**
+ * Subcommands only Admins can use. Discord cannot hide a single subcommand, so the House refuses them instead,
+ * and `/help` leaves them out by this list. Whole commands for Admins are left out by their default member permissions.
+ */
+const adminSubcommands = new Set(["rent set"]);
 
 /** The `/help` heading for each command, in the order the headings are shown. Any other command goes under `otherHeading`. */
 const helpHeadings: Record<string, string> = { chore: "Chores", rent: "Rent" };
 const otherHeading = "Other";
 
-/** The `/help` reply: each Housemate command with its options, required as `<name>` and optional as `[name]`. */
-export function helpText(config: Pick<Config, "isTestServer">): string {
+/**
+ * The `/help` reply: each Housemate command with its options, required as `<name>` and optional as `[name]`.
+ * Commands for Admins, and the test server's `/dev`, are left out.
+ */
+export function helpText(): string {
   const linesByHeading = new Map<string, string[]>(
     [...Object.values(helpHeadings), otherHeading].map((heading) => [
       heading,
       [],
     ]),
   );
-  for (const command of commandDefinitions(config)) {
+  for (const command of commands.map((builder) => builder.toJSON())) {
+    if (command.default_member_permissions != null) continue;
     const subcommands = (command.options ?? []).flatMap((option) =>
       option.type === ApplicationCommandOptionType.Subcommand
         ? [{ ...option, name: `${command.name} ${option.name}` }]
         : [],
     );
-    const lines = linesByHeading.get(
-      helpHeadings[command.name] ?? otherHeading,
-    );
-    for (const { name, description, options = [] } of subcommands.length > 0
-      ? subcommands
-      : [command]) {
-      if (notInHelp.has(name) || notInHelp.has(command.name)) continue;
+    const entries = subcommands.length > 0 ? subcommands : [command];
+    const lines =
+      linesByHeading.get(helpHeadings[command.name] ?? otherHeading) ?? [];
+    for (const { name, description, options = [] } of entries) {
+      if (adminSubcommands.has(name)) continue;
       const usage = [
         `/${name}`,
         ...options.map((option) =>
           option.required ? `<${option.name}>` : `[${option.name}]`,
         ),
       ].join(" ");
-      lines?.push(`\`${usage}\`: ${description}`);
+      lines.push(`\`${usage}\`: ${description}`);
     }
   }
   return [...linesByHeading]

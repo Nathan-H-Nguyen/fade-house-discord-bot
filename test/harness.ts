@@ -130,7 +130,7 @@ export function createTestHouse({
     timezone: "America/Los_Angeles",
     attachmentLimitBytes,
     isTestServer,
-    helpText: helpText({ isTestServer }),
+    helpText: helpText(),
     random: seededRandom(seed),
   });
 
