@@ -3,6 +3,8 @@ import {
   formatDate,
   formatDateTime,
   formatMonth,
+  isAtOrAfter,
+  parseDateTime,
   previousDay,
   previousMonth,
   type LocalDateTime,
@@ -117,8 +119,8 @@ export async function runDueJobs(
   for (const job of jobs) {
     see.run(job.name, formatDateTime(now));
     const period = job.currentPeriod(now);
-    // Both are YYYY-MM-DD HH:MM, so they compare as text.
-    if (formatDateTime(period.start) < (since.get(job.name) ?? "")) continue;
+    const seenSince = parseDateTime(since.get(job.name) ?? "");
+    if (seenSince && !isAtOrAfter(period.start, seenSince)) continue;
     if (hasRun.get(job.name, period.key)) continue;
     outbound.push(...(await job.run(period, roster)));
     record.run(job.name, period.key, completedAt.toISOString());

@@ -102,6 +102,15 @@ export function formatDateTime(time: LocalDateTime): string {
   return `${formatDate(time)} ${formatTime(time)}`;
 }
 
+/** Whether `time` is at or after `other`. */
+export function isAtOrAfter(
+  time: LocalDateTime,
+  other: LocalDateTime,
+): boolean {
+  // Both format as YYYY-MM-DD HH:MM, so they compare as text.
+  return formatDateTime(time) >= formatDateTime(other);
+}
+
 /** Reads a date and time written as YYYY-MM-DD HH:MM, without checking it is a real time. */
 export function parseDateTime(text: string): LocalDateTime | undefined {
   const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(text.trim());
