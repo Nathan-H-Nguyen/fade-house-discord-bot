@@ -39,104 +39,95 @@ async function rentRemindersAt(
   const outbound: Outbound[] = await house.tick({ members });
   return outbound.filter(
     (m): m is DirectMessage =>
-      "memberId" in m && m.content.startsWith("Reminder: your Rent"),
+      "memberId" in m && m.content.startsWith("**Rent Reminder**"),
   );
 }
 
-test("from 09:00 three days before the end of the month, each unpaid Housemate is DMed their Rent and the Due Date daily, then told they are overdue", async () => {
+/** A Rent Reminder DM as Housemates read it. */
+function reminder(month: string, amount: string, due: string): string {
+  return [
+    "**Rent Reminder**",
+    `Your Rent for **${month}** is **${amount}**.`,
+    `Due: *${due}*`,
+    "",
+    "Use `/rent paid` once you have paid it.",
+  ].join("\n");
+}
+
+test("from 09:00 three days before the end of the month until its Due Date, each unpaid Housemate is DMed that month's Rent daily, and nothing after", async () => {
   const house = await houseWithRent();
 
+  expect(await rentRemindersAt(house, "2026-11-26T09:00:00-08:00")).toEqual([]);
   expect(await rentRemindersAt(house, "2026-11-27T08:59:00-08:00")).toEqual([]);
   expect(await rentRemindersAt(house, "2026-11-27T09:00:00-08:00")).toEqual([
     {
       memberId: "1001",
-      content:
-        "Reminder: your Rent for December 2026 is $1,250.00, due December 1. Use /rent paid once you have paid it.",
+      content: reminder("November 2026", "$1,250.00", "November 30"),
       ifUndelivered: {
         channel: "admin",
         content:
-          "Could not DM <@1001> their Rent Reminder: $1,250.00 for December 2026, due December 1.",
+          "Could not DM <@1001> their Rent Reminder: $1,250.00 for November 2026, due November 30.",
       },
     },
     {
       memberId: "3001",
-      content:
-        "Reminder: your Rent for December 2026 is $900.00, due December 1. Use /rent paid once you have paid it.",
+      content: reminder("November 2026", "$900.00", "November 30"),
       ifUndelivered: {
         channel: "admin",
         content:
-          "Could not DM <@3001> their Rent Reminder: $900.00 for December 2026, due December 1.",
+          "Could not DM <@3001> their Rent Reminder: $900.00 for November 2026, due November 30.",
       },
     },
   ]);
   expect(await rentRemindersAt(house, "2026-11-27T15:00:00-08:00")).toEqual([]);
   expect(
-    (await rentRemindersAt(house, "2026-12-01T09:00:00-08:00")).map(
+    (await rentRemindersAt(house, "2026-11-30T09:00:00-08:00")).map(
       (m) => m.content,
     ),
   ).toEqual([
-    "Reminder: your Rent for December 2026 is $1,250.00, due December 1. Use /rent paid once you have paid it.",
-    "Reminder: your Rent for December 2026 is $900.00, due December 1. Use /rent paid once you have paid it.",
+    reminder("November 2026", "$1,250.00", "November 30"),
+    reminder("November 2026", "$900.00", "November 30"),
   ]);
-  expect(await rentRemindersAt(house, "2026-12-03T09:00:00-08:00")).toEqual([
-    {
-      memberId: "1001",
-      content:
-        "Reminder: your Rent for December 2026, $1,250.00, was due December 1 and is overdue. Use /rent paid once you have paid it.",
-      ifUndelivered: {
-        channel: "admin",
-        content:
-          "Could not DM <@1001> their Rent Reminder: $1,250.00 for December 2026, due December 1 and overdue.",
-      },
-    },
-    {
-      memberId: "3001",
-      content:
-        "Reminder: your Rent for December 2026, $900.00, was due December 1 and is overdue. Use /rent paid once you have paid it.",
-      ifUndelivered: {
-        channel: "admin",
-        content:
-          "Could not DM <@3001> their Rent Reminder: $900.00 for December 2026, due December 1 and overdue.",
-      },
-    },
-  ]);
+  for (const day of ["2026-12-01", "2026-12-03", "2026-12-27"]) {
+    expect(await rentRemindersAt(house, `${day}T09:00:00-08:00`)).toEqual([]);
+  }
 });
 
 test.each([
   {
     length: "28-day",
-    before: "2027-02",
+    month: "2027-02",
     start: "2027-02-25",
-    month: "March 2027",
-    due: "March 1",
+    name: "February 2027",
+    due: "February 28",
   },
   {
     length: "29-day",
-    before: "2028-02",
+    month: "2028-02",
     start: "2028-02-26",
-    month: "March 2028",
-    due: "March 1",
+    name: "February 2028",
+    due: "February 29",
   },
   {
     length: "30-day",
-    before: "2027-04",
+    month: "2027-04",
     start: "2027-04-27",
-    month: "May 2027",
-    due: "May 1",
+    name: "April 2027",
+    due: "April 30",
   },
   {
     length: "31-day",
-    before: "2026-12",
+    month: "2026-12",
     start: "2026-12-28",
-    month: "January 2027",
-    due: "January 1",
+    name: "December 2026",
+    due: "December 31",
   },
 ])(
-  "after $before, a $length month, the period for $month starts on $start at 09:00 house time",
-  async ({ before, start, month, due }) => {
-    const house = await houseWithRent(`${before}-10T10:00:00-08:00`);
+  "in $month, a $length month, Rent Reminders start on $start at 09:00 house time and name its last day",
+  async ({ month, start, name, due }) => {
+    const house = await houseWithRent(`${month}-10T10:00:00-08:00`);
     // Daylight saving time is in effect in April.
-    const offset = before.endsWith("-04") ? "-07:00" : "-08:00";
+    const offset = month.endsWith("-04") ? "-07:00" : "-08:00";
 
     expect(await rentRemindersAt(house, `${start}T08:59:00${offset}`)).toEqual(
       [],
@@ -146,47 +137,24 @@ test.each([
         (m) => m.content,
       ),
     ).toEqual([
-      `Reminder: your Rent for ${month} is $1,250.00, due ${due}. Use /rent paid once you have paid it.`,
-      `Reminder: your Rent for ${month} is $900.00, due ${due}. Use /rent paid once you have paid it.`,
+      reminder(name, "$1,250.00", due),
+      reminder(name, "$900.00", due),
     ]);
   },
 );
 
-test("Rent Reminders run across the year end, overdue from January 2", async () => {
-  const house = await houseWithRent("2026-12-10T10:00:00-08:00");
-  await rentRemindersAt(house, "2026-12-28T09:00:00-08:00");
-
-  expect(
-    (await rentRemindersAt(house, "2027-01-01T09:00:00-08:00")).map(
-      (m) => m.content,
-    ),
-  ).toContain(
-    "Reminder: your Rent for January 2027 is $900.00, due January 1. Use /rent paid once you have paid it.",
-  );
-  expect(
-    (await rentRemindersAt(house, "2027-01-02T09:00:00-08:00")).map(
-      (m) => m.content,
-    ),
-  ).toContain(
-    "Reminder: your Rent for January 2027, $900.00, was due January 1 and is overdue. Use /rent paid once you have paid it.",
-  );
-});
-
-test("a Housemate who marks their Rent paid gets no more reminders for that period", async () => {
+test("a Housemate who marks their Rent paid gets no more reminders that month, and is reminded again the next", async () => {
   const house = await houseWithRent();
   await rentRemindersAt(house, "2026-11-27T09:00:00-08:00");
   house.setTime("2026-11-28T12:00:00-08:00");
 
   const paid = await house.run("Chloe", { name: "rent paid" });
 
-  expect(paid).toEqual({
-    reply: {
-      content: "Marked your Rent for December 2026 paid.",
-      private: true,
-    },
-    outbound: [],
+  expect(paid.reply).toEqual({
+    content: "Marked your Rent for November 2026 paid.",
+    private: true,
   });
-  for (const day of ["2026-11-29", "2026-12-03", "2026-12-27"]) {
+  for (const day of ["2026-11-29", "2026-11-30"]) {
     expect(
       (await rentRemindersAt(house, `${day}T09:00:00-08:00`)).map(
         (m) => m.memberId,
@@ -199,45 +167,37 @@ test("a Housemate who marks their Rent paid gets no more reminders for that peri
       m.content,
     ]),
   ).toEqual([
-    [
-      "1001",
-      "Reminder: your Rent for January 2027 is $1,250.00, due January 1. Use /rent paid once you have paid it.",
-    ],
-    [
-      "3001",
-      "Reminder: your Rent for January 2027 is $900.00, due January 1. Use /rent paid once you have paid it.",
-    ],
+    ["1001", reminder("December 2026", "$1,250.00", "December 31")],
+    ["3001", reminder("December 2026", "$900.00", "December 31")],
   ]);
 });
 
-test("marking Rent paid again before the next period starts is refused, naming when it starts", async () => {
+test("a Housemate can mark their Rent paid any time in the month, and it counts for that month only", async () => {
   const house = await houseWithRent();
-  house.setTime("2026-11-27T09:00:00-08:00");
-  await house.tick();
-  await house.run("Chloe", { name: "rent paid" });
-  house.setTime("2026-12-28T08:59:00-08:00");
 
   const early = await house.run("Chloe", { name: "rent paid" });
+  const november = await rentRemindersAt(house, "2026-11-27T09:00:00-08:00");
+  house.setTime("2026-12-01T00:00:00-08:00");
+  const december = await house.run("Chloe", { name: "rent paid" });
 
-  expect(early).toEqual({
-    reply: {
-      content:
-        "You have already paid your Rent for December 2026. The period for January 2027 starts on December 28 at 09:00, and you can mark it paid then.",
-      private: true,
-    },
-    outbound: [],
-  });
+  expect(early.reply.content).toBe("Marked your Rent for November 2026 paid.");
+  expect(november.map((m) => m.memberId)).toEqual(["1001"]);
+  expect(december.reply.content).toBe(
+    "Marked your Rent for December 2026 paid.",
+  );
 });
 
-test("marking Rent paid before the bot's first rent period starts is refused", async () => {
+test("marking Rent paid again in the same month is refused, naming when the next month's can be marked", async () => {
   const house = await houseWithRent();
+  await house.run("Chloe", { name: "rent paid" });
+  house.setTime("2026-11-30T23:59:00-08:00");
 
-  const early = await house.run("Chloe", { name: "rent paid" });
+  const again = await house.run("Chloe", { name: "rent paid" });
 
-  expect(early).toEqual({
+  expect(again).toEqual({
     reply: {
       content:
-        "The first rent period, for December 2026, starts on November 27 at 09:00, and you can mark your Rent paid then.",
+        "You have already paid your Rent for November 2026. You can mark your Rent for December 2026 paid from December 1.",
       private: true,
     },
     outbound: [],
@@ -246,8 +206,6 @@ test("marking Rent paid before the bot's first rent period starts is refused", a
 
 test("a Housemate without Rent set cannot mark it paid", async () => {
   const house = await houseWithRent();
-  house.setTime("2026-11-27T09:00:00-08:00");
-  await house.tick();
 
   const paid = await house.run("Ben", { name: "rent paid" });
 
@@ -260,10 +218,8 @@ test("a Housemate without Rent set cannot mark it paid", async () => {
   });
 });
 
-test("once everyone with Rent has paid, #chores is told once", async () => {
+test("each payment is posted in #rent, and once everyone with Rent has paid, #rent is told once", async () => {
   const house = await houseWithRent();
-  house.setTime("2026-11-27T09:00:00-08:00");
-  await house.tick();
 
   const alice = await house.run("Alice", { name: "rent paid" });
   const chloe = await house.run("Chloe", { name: "rent paid" });
@@ -271,15 +227,25 @@ test("once everyone with Rent has paid, #chores is told once", async () => {
   house.setTime("2026-11-28T09:00:00-08:00");
   const nextDay = await house.tick();
 
-  expect(alice.outbound).toEqual([]);
+  expect(alice.outbound).toEqual([
+    {
+      channel: "rent",
+      content: "<@1001> has paid their Rent for November 2026.",
+    },
+  ]);
   expect(chloe.outbound).toEqual([
     {
-      channel: "chores",
-      content: "Everyone has paid their Rent for December 2026.",
+      channel: "rent",
+      content: "<@3001> has paid their Rent for November 2026.",
+    },
+    {
+      channel: "rent",
+      content: "Everyone has paid their Rent for November 2026.",
     },
   ]);
   expect(again.outbound).toEqual([]);
-  expect(postsIn(nextDay, "chores")).toEqual([]);
+  expect(postsIn(nextDay, "rent")).toEqual([]);
+  expect(postsIn([...alice.outbound, ...chloe.outbound], "chores")).toEqual([]);
 });
 
 test("a Housemate who leaves gets no more reminders, and is not waited on for the all-paid message", async () => {
@@ -291,8 +257,8 @@ test("a Housemate who leaves gets no more reminders, and is not waited on for th
   const outbound = await house.tick({ members: membersNamed("Alice") });
 
   expect(outbound.filter((m) => "memberId" in m)).toEqual([]);
-  expect(postsIn(outbound, "chores")).toEqual([
-    "Everyone has paid their Rent for December 2026.",
+  expect(postsIn(outbound, "rent")).toEqual([
+    "Everyone has paid their Rent for November 2026.",
   ]);
 });
 
@@ -314,43 +280,40 @@ test("after downtime, each unpaid Housemate gets at most one reminder per day", 
   await rentRemindersAt(house, "2026-11-27T09:00:00-08:00");
 
   expect(
-    (await rentRemindersAt(house, "2026-12-03T14:00:00-08:00")).map(
+    (await rentRemindersAt(house, "2026-11-28T14:00:00-08:00")).map(
       (m) => m.content,
     ),
   ).toEqual([
-    "Reminder: your Rent for December 2026, $1,250.00, was due December 1 and is overdue. Use /rent paid once you have paid it.",
-    "Reminder: your Rent for December 2026, $900.00, was due December 1 and is overdue. Use /rent paid once you have paid it.",
+    reminder("November 2026", "$1,250.00", "November 30"),
+    reminder("November 2026", "$900.00", "November 30"),
   ]);
-  expect(await rentRemindersAt(house, "2026-12-03T15:00:00-08:00")).toEqual([]);
-  // Off from before 09:00 on December 4 until the next morning: the 4th's reminder is not sent late.
-  expect(await rentRemindersAt(house, "2026-12-05T08:30:00-08:00")).toEqual([]);
+  expect(await rentRemindersAt(house, "2026-11-28T15:00:00-08:00")).toEqual([]);
+  // Off from before 09:00 on November 29 until the next morning: the 29th's reminder is not sent late.
+  expect(await rentRemindersAt(house, "2026-11-30T08:30:00-08:00")).toEqual([]);
   expect(
-    await rentRemindersAt(house, "2026-12-05T09:00:00-08:00"),
+    await rentRemindersAt(house, "2026-11-30T09:00:00-08:00"),
   ).toHaveLength(2);
 });
 
-test("when the bot first starts mid-period, Rent is not tracked until the next period starts", async () => {
+test("when the bot first starts during the reminder days, it reminds of that month's Rent from the next morning", async () => {
   const house = await houseWithRent("2026-11-28T10:00:00-08:00");
 
-  expect(await rentRemindersAt(house, "2026-12-02T09:00:00-08:00")).toEqual([]);
   expect(
-    await rentRemindersAt(house, "2026-12-28T09:00:00-08:00"),
+    await rentRemindersAt(house, "2026-11-29T09:00:00-08:00"),
   ).toHaveLength(2);
 });
 
-test("/rent list shows who has paid for the current period, and who is overdue after the Due Date", async () => {
+test("/rent list shows who has paid for the current month, and each month starts with nobody paid", async () => {
   const house = await houseWithRent();
-  house.setTime("2026-11-27T09:00:00-08:00");
-  await house.tick();
   await house.run("Chloe", { name: "rent paid" });
 
-  const before = await house.run("Ben", { name: "rent list" });
+  const november = await house.run("Ben", { name: "rent list" });
   house.setTime("2026-12-02T09:00:00-08:00");
-  const after = await house.run("Ben", { name: "rent list" });
+  const december = await house.run("Ben", { name: "rent list" });
 
-  expect(before.reply.content).toBe(
+  expect(november.reply.content).toBe(
     [
-      "**Rent for December 2026**, due December 1",
+      "**Rent for November 2026**, due November 30",
       "- <@1001> (Floor 1): $1,250.00, **not paid**",
       "- <@1002> (Floor 1): **no Rent set**",
       "- <@3001> (Floor 3): $900.00, paid",
@@ -359,8 +322,11 @@ test("/rent list shows who has paid for the current period, and who is overdue a
       "- <@3004> (Floor 3): **no Rent set**",
     ].join("\n"),
   );
-  expect(after.reply.content).toContain(
-    "- <@1001> (Floor 1): $1,250.00, **overdue**",
+  expect(december.reply.content).toContain(
+    "**Rent for December 2026**, due December 31",
+  );
+  expect(december.reply.content).toContain(
+    "- <@3001> (Floor 3): $900.00, **not paid**",
   );
 });
 
@@ -376,5 +342,5 @@ test("the all-paid message waits on a member with both floor roles who has not p
     members: [alice, { ...chloe, roleNames: ["Floor 1", "Floor 3"] }],
   });
 
-  expect(postsIn(outbound, "chores")).toEqual([]);
+  expect(postsIn(outbound, "rent")).toEqual([]);
 });

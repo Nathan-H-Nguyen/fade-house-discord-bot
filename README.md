@@ -5,22 +5,22 @@ The vocabulary (Housemate, Chore, Scope, Assignment and so on) is defined in [GL
 
 ## Commands
 
-| Command                                        | Who        | What it does                                                                                |
-| ---------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------- |
-| `/ping`                                        | Anyone     | Confirms the bot is connected.                                                              |
-| `/chore add <name> <scope>`                    | Housemates | Adds a Chore to the pool, with Scope Global, Floor 1 or Floor 3.                            |
-| `/chore edit <chore> [name] [scope]`           | Housemates | Renames a Chore or changes its Scope.                                                       |
-| `/chore retire <chore>`                        | Housemates | Takes a Chore out of the pool, keeping its history.                                         |
-| `/chore list`                                  | Housemates | Lists the active Chores grouped by Scope.                                                   |
-| `/chore mine`                                  | Housemates | Lists your open Assignments, Overdue ones marked, privately.                                |
-| `/chore done <assignment>`                     | Housemates | Marks one of your open Assignments complete.                                                |
-| `/rent set <housemate> <amount>`               | Admins     | Sets a Housemate's monthly Rent, in dollars such as 1250.50.                                |
-| `/rent list`                                   | Housemates | Lists every Housemate's Rent, flagging any without one set.                                 |
-| `/rent paid`                                   | Housemates | Marks your Rent paid for the current rent period.                                           |
-| `/admin chore-done <housemate> <assignment>`   | Admins     | Marks a Housemate's open Assignment complete for them.                                      |
-| `/admin chore-reopen <housemate> <assignment>` | Admins     | Reopens an Assignment a Housemate completed this month.                                     |
-| `/admin rent-paid <housemate> [paid]`          | Admins     | Marks a Housemate's Rent paid, or with `paid: False` not paid, for the current rent period. |
-| `/admin reassign`                              | Admins     | Hands out this month's open new Assignments again (see Admin corrections).                  |
+| Command                                        | Who        | What it does                                                                          |
+| ---------------------------------------------- | ---------- | ------------------------------------------------------------------------------------- |
+| `/ping`                                        | Anyone     | Confirms the bot is connected.                                                        |
+| `/chore add <name> <scope>`                    | Housemates | Adds a Chore to the pool, with Scope Global, Floor 1 or Floor 3.                      |
+| `/chore edit <chore> [name] [scope]`           | Housemates | Renames a Chore or changes its Scope.                                                 |
+| `/chore retire <chore>`                        | Housemates | Takes a Chore out of the pool, keeping its history.                                   |
+| `/chore list`                                  | Housemates | Lists the active Chores grouped by Scope.                                             |
+| `/chore mine`                                  | Housemates | Lists your open Assignments, Overdue ones marked, privately.                          |
+| `/chore done <assignment>`                     | Housemates | Marks one of your open Assignments complete.                                          |
+| `/rent set <housemate> <amount>`               | Admins     | Sets a Housemate's monthly Rent, in dollars such as 1250.50.                          |
+| `/rent list`                                   | Housemates | Lists every Housemate's Rent, flagging any without one set.                           |
+| `/rent paid`                                   | Housemates | Marks your Rent paid for the current month.                                           |
+| `/admin chore-done <housemate> <assignment>`   | Admins     | Marks a Housemate's open Assignment complete for them.                                |
+| `/admin chore-reopen <housemate> <assignment>` | Admins     | Reopens an Assignment a Housemate completed this month.                               |
+| `/admin rent-paid <housemate> [paid]`          | Admins     | Marks a Housemate's Rent paid, or with `paid: False` not paid, for the current month. |
+| `/admin reassign`                              | Admins     | Hands out this month's open new Assignments again (see Admin corrections).            |
 
 Edit and retire suggest active Chores as you type.
 Done suggests only your own open Assignments, and posts a short completion message in #chores.
@@ -39,8 +39,7 @@ Anyone else gets a private refusal explaining why.
 | ------------------ | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | Monthly assignment | The 1st, 00:05 house time                                 | Summarises the month just ended and hands out the new month's Chores (see Monthly assignment). |
 | Chore reminder     | 09:00 house time, 7 days before the last day of the month | DMs each Housemate their open Assignments (see Chore reminder).                                |
-| Rent period        | 09:00 house time, 3 days before the last day of the month | Starts the rent period for the coming month (see Rent).                                        |
-| Rent Reminder      | Daily, 09:00 house time                                   | DMs each Housemate who has not paid for the current rent period (see Rent).                    |
+| Rent Reminder      | 09:00 house time, the last 4 days of the month            | DMs each Housemate who has not paid for the month (see Rent).                                  |
 | Backup             | Daily, 03:00 house time                                   | Posts a snapshot of the database in #bot-admin (see Backups).                                  |
 
 The bot checks for due jobs when it starts and about once a minute.
@@ -85,24 +84,21 @@ If the bot is off from before the reminder time until the month has ended, that 
 
 ## Rent
 
-Each rent period is named after the month the Rent is for, and starts at 09:00 house time three days before the end of the month before.
-December's period starts on November 27, and its Due Date is December 1.
-A period runs until the next one starts, so `/rent paid` always marks the latest period that has started.
-Rent left unpaid when the next period starts is no longer reminded of or shown, and has to be settled outside the bot.
+Rent is tracked one calendar month at a time, and its Due Date is the month's last day.
+Any time during the month, a Housemate can mark that month's Rent paid with `/rent paid`.
+Each month stands alone: Rent not marked paid by the end of the month is settled in person, and the bot sends nothing more about it.
 
-Every day at 09:00 from the start of the period, each Housemate with Rent set who has not marked it paid gets a Rent Reminder DM with their amount and the Due Date.
-After the Due Date the reminder says they are overdue.
+Every day at 09:00 from three days before the Due Date until the Due Date (November 27 to 30 for November), each Housemate with Rent set who has not marked it paid gets a Rent Reminder DM with the month, their amount and the Due Date.
 Reminders stop as soon as they mark it paid, or as soon as they stop being a Housemate, such as when their floor role is removed.
 A member with both floor roles is not reminded.
 If a DM cannot be delivered, the bot says so in #bot-admin.
 If the bot is off at 09:00, the day's reminder goes out when it comes back that day; a day missed entirely is not made up.
 
-Marking Rent paid again before the next period starts is refused, naming when it starts.
-Once every Housemate with Rent set has paid for a period, the bot says so once in #chores.
+Each time a Housemate's Rent is marked paid, the bot says so in #rent.
+Marking Rent paid again in the same month is refused, naming when next month's can be marked.
+Once every Housemate with Rent set has paid for the month, the bot says so once in #rent.
 It does not wait on members who have left, but does wait on a member with both floor roles, who must have one removed before they can mark their Rent paid themselves, or have an Admin mark it.
-`/rent list` shows, for the current period, who has paid, who has not and who is overdue.
-
-The bot tracks Rent from the first rent period that starts after it first runs: until then there are no Rent Reminders, and `/rent paid` is refused.
+`/rent list` shows, for the current month, who has paid and who has not.
 
 ## Admin corrections
 
@@ -114,8 +110,9 @@ Discord shows `/admin` only to members with the Administrator permission, unless
 - `/admin chore-reopen` reopens an Assignment the Housemate completed this month: one given this month, or an Overdue Assignment that stood in for its Chore this month.
   A reopened Overdue Assignment is overdue again.
   Assignments completed in earlier months cannot be reopened, since their Chores have been handed out again.
-- `/admin rent-paid` marks a Housemate's Rent paid or not paid for the current rent period, which works for a member with both floor roles too.
-  Marking the last unpaid Housemate paid posts the all-paid message in #chores; marking someone not paid afterwards does not withdraw it, and it is not posted again.
+- `/admin rent-paid` marks a Housemate's Rent paid or not paid for the current month, which works for a member with both floor roles too.
+  Marking a Housemate paid posts in #rent as `/rent paid` does, including the all-paid message for the last unpaid Housemate.
+  Marking someone not paid is logged only in #bot-admin; it does not withdraw the all-paid message, and that is not posted again.
   Rent Reminders resume for a Housemate marked not paid from the next day's 09:00 reminder.
 - `/admin reassign` corrects a bad monthly run, such as one where floor roles were wrong on the 1st.
   It discards this month's Assignments that are neither completed nor Overdue, and hands their Chores out again with the server's roles as they are now, by the same rules as the monthly run.
@@ -184,7 +181,8 @@ It is ignored by git.
 | `DISCORD_TOKEN`          | Yes      | The bot token. Use the test bot's token while developing.                                         |
 | `DISCORD_APPLICATION_ID` | Yes      | The application ID, from the Developer Portal's General Information page.                         |
 | `DISCORD_GUILD_ID`       | Yes      | The server the bot runs in. Commands are registered and answered only there.                      |
-| `CHORES_CHANNEL_ID`      | Yes      | The #chores channel, for Assignment posts, completions and the all-paid Rent message.             |
+| `CHORES_CHANNEL_ID`      | Yes      | The #chores channel, for Assignment posts and completions.                                        |
+| `RENT_CHANNEL_ID`        | Yes      | The #rent channel, for Rent payments and the all-paid message.                                    |
 | `ADMIN_CHANNEL_ID`       | Yes      | The #bot-admin channel, for admin logs, warnings and backups.                                     |
 | `TIMEZONE`               | No       | The house's IANA timezone, which defines months and job times. Defaults to `America/Los_Angeles`. |
 | `IS_TEST_SERVER`         | No       | `true` only in the test server, to enable the `/dev` commands. Defaults to `false`.               |
@@ -215,7 +213,7 @@ With `IS_TEST_SERVER=true`, the bot registers two extra commands for walking thr
 The bot's time keeps running from where it was moved to, and only moves forward.
 It goes back to the real time when the bot restarts.
 Jobs that ran for days you moved past are then skipped when those days really arrive, so use a throwaway database for the walk-through.
-For example, `/dev advance-to 2026-11-13 03:00` posts that day's backup in #bot-admin, `/dev advance-to 2026-11-27 09:00` sends the first Rent Reminders for December, and `/dev advance-to 2026-12-01 00:05` hands out December's Chores.
+For example, `/dev advance-to 2026-11-13 03:00` posts that day's backup in #bot-admin, `/dev advance-to 2026-11-27 09:00` sends the first Rent Reminders for November, and `/dev advance-to 2026-12-01 00:05` hands out December's Chores.
 Outside the test server these commands are not registered, and the House refuses them.
 
 CI runs the typecheck, lint and tests on every push and pull request.

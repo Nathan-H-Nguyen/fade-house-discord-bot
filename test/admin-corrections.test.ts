@@ -194,7 +194,7 @@ test("an Admin reopens an Overdue Assignment completed this month, and it is ove
   );
 });
 
-/** A House on November 28th, in the rent period for December, where Alice owes $1,250 and Chloe $900. */
+/** A House on November 28th, during the Rent Reminders for November, where Alice owes $1,250 and Chloe $900. */
 async function houseOwingRent(): Promise<TestHouse> {
   const house = createTestHouse({ now: "2026-11-12T10:00:00-08:00" });
   await house.tick();
@@ -217,7 +217,7 @@ async function rentList(house: TestHouse): Promise<string> {
   return (await house.run("Ben", { name: "rent list" })).reply.content;
 }
 
-test("an Admin marks a Housemate's Rent paid, which #bot-admin logs, and #chores hears once everyone has paid", async () => {
+test("an Admin marks a Housemate's Rent paid, which #bot-admin logs and #rent announces, with everyone paid", async () => {
   const house = await houseOwingRent();
   await house.run("Chloe", { name: "rent paid" });
 
@@ -229,17 +229,21 @@ test("an Admin marks a Housemate's Rent paid, which #bot-admin logs, and #chores
 
   expect(paid).toEqual({
     reply: {
-      content: "Marked <@1001>'s Rent for December 2026 paid.",
+      content: "Marked <@1001>'s Rent for November 2026 paid.",
       private: true,
     },
     outbound: [
       {
         channel: "admin",
-        content: "<@1002> marked <@1001>'s Rent for December 2026 paid.",
+        content: "<@1002> marked <@1001>'s Rent for November 2026 paid.",
       },
       {
-        channel: "chores",
-        content: "Everyone has paid their Rent for December 2026.",
+        channel: "rent",
+        content: "<@1001> has paid their Rent for November 2026.",
+      },
+      {
+        channel: "rent",
+        content: "Everyone has paid their Rent for November 2026.",
       },
     ],
   });
@@ -248,7 +252,7 @@ test("an Admin marks a Housemate's Rent paid, which #bot-admin logs, and #chores
   );
 });
 
-test("an Admin unmarks a Housemate's Rent, which #bot-admin logs, and their Rent Reminders resume", async () => {
+test("an Admin unmarks a Housemate's Rent, which only #bot-admin logs, and their Rent Reminders resume", async () => {
   const house = await houseOwingRent();
   await house.run("Alice", { name: "rent paid" });
 
@@ -260,13 +264,13 @@ test("an Admin unmarks a Housemate's Rent, which #bot-admin logs, and their Rent
 
   expect(unpaid).toEqual({
     reply: {
-      content: "Marked <@1001>'s Rent for December 2026 not paid.",
+      content: "Marked <@1001>'s Rent for November 2026 not paid.",
       private: true,
     },
     outbound: [
       {
         channel: "admin",
-        content: "<@1002> marked <@1001>'s Rent for December 2026 not paid.",
+        content: "<@1002> marked <@1001>'s Rent for November 2026 not paid.",
       },
     ],
   });
@@ -283,11 +287,11 @@ test("an Admin unmarks a Housemate's Rent, which #bot-admin logs, and their Rent
 test.each([
   [
     { memberId: "1001", paid: true },
-    "<@1001> has already paid their Rent for December 2026.",
+    "<@1001> has already paid their Rent for November 2026.",
   ],
   [
     { memberId: "3001", paid: false },
-    "<@3001> has not paid their Rent for December 2026.",
+    "<@3001> has not paid their Rent for November 2026.",
   ],
   [
     { memberId: "1002", paid: true },
@@ -312,9 +316,8 @@ test.each([
   },
 );
 
-test("an Admin marking Rent paid before the first rent period has started is refused", async () => {
+test("an Admin can mark a Housemate's Rent paid any time in the month", async () => {
   const house = createTestHouse();
-  await house.tick();
   await house.run(
     "Alice",
     { name: "rent set", memberId: "1001", amount: "1250" },
@@ -327,14 +330,13 @@ test("an Admin marking Rent paid before the first rent period has started is ref
     { isAdmin: true },
   );
 
-  expect(paid).toEqual({
-    reply: {
-      content:
-        "The first rent period, for December 2026, starts on November 27 at 09:00, and Rent can be marked paid then.",
-      private: true,
-    },
-    outbound: [],
-  });
+  expect(paid.reply.content).toBe(
+    "Marked <@1001>'s Rent for November 2026 paid.",
+  );
+  expect(postsIn(paid.outbound, "rent")).toEqual([
+    "<@1001> has paid their Rent for November 2026.",
+    "Everyone has paid their Rent for November 2026.",
+  ]);
 });
 
 test("an Admin reassigns the month, handing out its open new Assignments again and keeping completed and Overdue ones", async () => {

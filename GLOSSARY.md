@@ -43,11 +43,13 @@ _Avoid_: Notification, nag
 ## Rent
 
 **Rent**:
-The monthly amount a specific Housemate owes, which differs between housemates.
+The amount a specific Housemate owes for each calendar month, which differs between housemates.
+Each month's Rent stands alone: whether last month's was marked paid has no bearing on this month's.
 
 **Due Date**:
-The 1st of the month, when the coming month's Rent is owed.
+The last day of the month a Housemate's Rent is for.
 
 **Rent Reminder**:
-A private daily message to a Housemate who has not yet marked their Rent paid, starting 3 days before the end of the month.
+A private daily message to a Housemate who has not yet marked their Rent paid, from 3 days before the end of the month until its Due Date.
+Rent still unpaid after its Due Date is settled in person, so the bot sends nothing more about it.
 _Avoid_: Notification, nag

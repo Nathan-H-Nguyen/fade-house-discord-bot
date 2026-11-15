@@ -16,10 +16,10 @@ test("an Admin sets a Housemate's Rent in dollars, and the list shows it with ev
   });
   expect((await house.run("Ben", { name: "rent list" })).reply).toEqual({
     content: [
-      "**Rent**",
+      "**Rent for November 2026**, due November 30",
       "- <@1001> (Floor 1): **no Rent set**",
       "- <@1002> (Floor 1): **no Rent set**",
-      "- <@3001> (Floor 3): $1,250.00",
+      "- <@3001> (Floor 3): $1,250.00, **not paid**",
       "- <@3002> (Floor 3): **no Rent set**",
       "- <@3003> (Floor 3): **no Rent set**",
       "- <@3004> (Floor 3): **no Rent set**",
@@ -71,6 +71,7 @@ test("setting and changing Rent is logged in #bot-admin with who did it", async 
     "<@3001> changed <@3002>'s Rent from $900.00 to $950.00.",
   ]);
   expect(postsIn(changed.outbound, "chores")).toEqual([]);
+  expect(postsIn(changed.outbound, "rent")).toEqual([]);
 });
 
 test("an Admin changes a Housemate's Rent, and the reply says what it was", async () => {

@@ -3,6 +3,7 @@ export interface Config {
   applicationId: string;
   guildId: string;
   choresChannelId: string;
+  rentChannelId: string;
   adminChannelId: string;
   /** IANA name of the house timezone, which defines months and job times. */
   timezone: string;
@@ -28,6 +29,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     applicationId: required("DISCORD_APPLICATION_ID"),
     guildId: required("DISCORD_GUILD_ID"),
     choresChannelId: required("CHORES_CHANNEL_ID"),
+    rentChannelId: required("RENT_CHANNEL_ID"),
     adminChannelId: required("ADMIN_CHANNEL_ID"),
     timezone: env["TIMEZONE"]?.trim() || "America/Los_Angeles",
     isTestServer: false,

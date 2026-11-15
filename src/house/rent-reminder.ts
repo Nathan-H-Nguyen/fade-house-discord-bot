@@ -11,20 +11,18 @@ import type { Outbound, Roster } from "./index.ts";
 import { mention } from "./markdown.ts";
 import {
   formatDollars,
-  hasRentPeriodStarted,
-  isRentOverdue,
+  isRentReminderDay,
   markAllPaid,
   paidRent,
-  rentPeriodAt,
+  rentPeriodFor,
   rents,
 } from "./rent.ts";
 
 /**
- * DMs each Housemate with Rent who has not paid for the rent period under way at `at` their amount and Due Date,
- * saying they are overdue once it has passed. Members who are not Housemates get nothing.
- * If everyone left to pay has paid, such as when the last who had not has left, says so in #chores.
- * Nobody is reminded for a rent period the bot has not started, or once the day of `at` has ended,
- * such as when the bot was off until the next morning.
+ * From three days before the Due Date until it, DMs each Housemate with Rent who has not paid for the month of `at`
+ * their amount and Due Date. Members who are not Housemates get nothing.
+ * If everyone left to pay has paid, such as when the last who had not has left, says so in #rent.
+ * Nobody is reminded once the day of `at` has ended, such as when the bot was off until the next morning.
  */
 export function remindOfRent(
   db: Database.Database,
@@ -42,15 +40,17 @@ export function remindOfRent(
   },
 ): Outbound[] {
   if (formatDate(at) !== formatDate(today)) return [];
-  const period = rentPeriodAt(at);
-  if (!hasRentPeriodStarted(db, period)) return [];
+  const period = rentPeriodFor(at);
 
   const amounts = rents(db);
   const paid = paidRent(db, period);
-  const overdue = isRentOverdue(period, at);
   const monthName = nameMonth(period.month);
   const dueName = nameDay(period.due);
-  const reminders = [...housematesIn(roster).housemates]
+  // The all-paid check below runs every day, so a Housemate leaving can complete the month on any day.
+  const remindable = isRentReminderDay(at)
+    ? [...housematesIn(roster).housemates]
+    : [];
+  const reminders = remindable
     .sort(byFloorThenName)
     .flatMap(({ member }): Outbound[] => {
       const cents = amounts.get(member.id);
@@ -59,16 +59,16 @@ export function remindOfRent(
       return [
         {
           memberId: member.id,
-          content:
-            (overdue
-              ? `Reminder: your Rent for ${monthName}, ${amount}, was due ${dueName} and is overdue.`
-              : `Reminder: your Rent for ${monthName} is ${amount}, due ${dueName}.`) +
-            " Use /rent paid once you have paid it.",
+          content: [
+            "**Rent Reminder**",
+            `Your Rent for **${monthName}** is **${amount}**.`,
+            `Due: *${dueName}*`,
+            "",
+            "Use `/rent paid` once you have paid it.",
+          ].join("\n"),
           ifUndelivered: {
             channel: "admin",
-            content:
-              `Could not DM ${mention(member.id)} their Rent Reminder: ${amount} for ${monthName}, due ${dueName}` +
-              (overdue ? " and overdue." : "."),
+            content: `Could not DM ${mention(member.id)} their Rent Reminder: ${amount} for ${monthName}, due ${dueName}.`,
           },
         },
       ];
