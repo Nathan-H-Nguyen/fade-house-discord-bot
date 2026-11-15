@@ -30,7 +30,7 @@ import { backUp } from "./backup.ts";
 import {
   choreReminderTime,
   midMonthReminderDay,
-  reminderDay,
+  weekLeftReminderDay,
   remindOfChores,
 } from "./chore-reminder.ts";
 import {
@@ -269,7 +269,7 @@ export function openHouse(options: {
       currentPeriod: monthly(
         choreReminderTime.hour,
         choreReminderTime.minute,
-        reminderDay,
+        weekLeftReminderDay,
       ),
       run: (period, roster) =>
         Promise.resolve(
