@@ -60,6 +60,13 @@ const migrations: readonly string[] = [
     paid_at TEXT NOT NULL,
     PRIMARY KEY (month, housemate_id)
   ) STRICT`,
+  // Rent periods were named after the month the Rent was due in, the month after the one it is for.
+  // Moves each back a month, through a temporary name so no two rows share a key midway.
+  `PRAGMA defer_foreign_keys = ON;
+  UPDATE rent_periods SET month = 'moving ' || strftime('%Y-%m', month || '-01', '-1 month');
+  UPDATE rent_periods SET month = substr(month, length('moving ') + 1);
+  UPDATE rent_payments SET month = 'moving ' || strftime('%Y-%m', month || '-01', '-1 month');
+  UPDATE rent_payments SET month = substr(month, length('moving ') + 1);`,
 ];
 
 /** Opens the database at `path` (or `:memory:`) and brings its schema up to date. */

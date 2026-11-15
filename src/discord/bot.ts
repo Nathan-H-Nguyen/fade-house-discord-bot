@@ -119,6 +119,7 @@ function deliverTo(
 ): (messages: readonly Outbound[]) => Promise<void> {
   const channelIds: Record<Post["channel"], string> = {
     chores: config.choresChannelId,
+    rent: config.rentChannelId,
     admin: config.adminChannelId,
   };
 

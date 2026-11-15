@@ -47,22 +47,17 @@ import { escapeMarkdown, mention } from "./markdown.ts";
 import { assignMonth, reassignMonth } from "./monthly-run.ts";
 import {
   formatDollars,
-  hasRentPeriodStarted,
-  markAllPaid,
   maxRentCents,
-  nameRentPeriodStart,
   nextRentPeriod,
   paidRent,
   parseDollars,
   payRent,
   rentLine,
   rentOf,
-  rentPeriodAt,
+  rentPeriodFor,
   rentReminderTime,
-  rentStatus,
   rents,
   setRent,
-  startRentPeriod,
   unpayRent,
 } from "./rent.ts";
 import { remindOfRent } from "./rent-reminder.ts";
@@ -114,7 +109,7 @@ export type Command =
   | { name: "admin chore-done"; memberId: string; choreName: string }
   /** Admin only. Reopens one of `memberId`'s Assignments completed this month, named by its Chore. */
   | { name: "admin chore-reopen"; memberId: string; choreName: string }
-  /** Admin only. Marks `memberId`'s Rent for the current rent period paid, or not paid. */
+  /** Admin only. Marks `memberId`'s Rent for the current month paid, or not paid. */
   | { name: "admin rent-paid"; memberId: string; paid: boolean }
   /** Admin only. Discards this month's open new Assignments and hands their Chores out again. */
   | { name: "admin reassign" }
@@ -135,9 +130,9 @@ export interface Attachment {
   data: Uint8Array;
 }
 
-/** A message to post in #chores or #bot-admin. */
+/** A message to post in #chores, #rent or #bot-admin. */
 export interface Post {
-  channel: "chores" | "admin";
+  channel: "chores" | "rent" | "admin";
   content: string;
   attachment?: Attachment;
 }
@@ -255,15 +250,6 @@ export function openHouse(options: {
             roster,
           }),
         ),
-    },
-    // Starts each rent period before the day's Rent Reminders, which only go out for a started period.
-    {
-      name: "rent-period",
-      currentPeriod: rentPeriodAt,
-      run: (period) => {
-        startRentPeriod(db, rentPeriodAt(period.start));
-        return Promise.resolve([]);
-      },
     },
     {
       name: "rent-reminder",
@@ -687,16 +673,9 @@ export function openHouse(options: {
         }
 
         case "admin rent-paid": {
-          const period = rentPeriodAt(calendar.toLocal(now()));
+          const period = rentPeriodFor(calendar.toLocal(now()));
           const monthName = nameMonth(period.month);
           const holder = mention(command.memberId);
-          if (!hasRentPeriodStarted(db, period)) {
-            const next = nextRentPeriod(period);
-            return reply(
-              `The first rent period, for ${nameMonth(next.month)}, starts on ${nameRentPeriodStart(next)}, ` +
-                "and Rent can be marked paid then.",
-            );
-          }
           if (rentOf(db, command.memberId) === undefined) {
             return reply(
               `${holder} has no Rent set. Set it with /rent set first.`,
@@ -723,11 +702,14 @@ export function openHouse(options: {
               outbound: [log],
             };
           }
-          payRent(db, { memberId: command.memberId, period }, now());
-          const allPaid = markAllPaid(db, { period, roster }, now());
+          const announcements = payRent(
+            db,
+            { memberId: command.memberId, period, roster },
+            now(),
+          );
           return {
             reply: { content: `Marked ${change}.`, private: true },
-            outbound: allPaid ? [log, allPaid] : [log],
+            outbound: [log, ...announcements],
           };
         }
 
@@ -767,64 +749,44 @@ export function openHouse(options: {
           const housemates = [...housematesIn(roster).housemates].sort(
             byFloorThenName,
           );
-          const today = calendar.toLocal(now());
-          const period = rentPeriodAt(today);
-          if (!hasRentPeriodStarted(db, period)) {
-            return reply(
-              [
-                "**Rent**",
-                ...housemates.map((h) => rentLine(h, amounts.get(h.member.id))),
-              ].join("\n"),
-            );
-          }
+          const period = rentPeriodFor(calendar.toLocal(now()));
           const paid = paidRent(db, period);
           return reply(
             [
               `**Rent for ${nameMonth(period.month)}**, due ${nameDay(period.due)}`,
               ...housemates.map((h) =>
-                rentLine(
-                  h,
-                  amounts.get(h.member.id),
-                  rentStatus(period, {
-                    paid: paid.has(h.member.id),
-                    on: today,
-                  }),
-                ),
+                rentLine(h, amounts.get(h.member.id), paid.has(h.member.id)),
               ),
             ].join("\n"),
           );
         }
 
         case "rent paid": {
-          const period = rentPeriodAt(calendar.toLocal(now()));
+          const period = rentPeriodFor(calendar.toLocal(now()));
           const monthName = nameMonth(period.month);
-          const next = nextRentPeriod(period);
-          if (!hasRentPeriodStarted(db, period)) {
-            // The bot starts tracking Rent with the first period that starts after it is set up.
-            return reply(
-              `The first rent period, for ${nameMonth(next.month)}, starts on ${nameRentPeriodStart(next)}, ` +
-                "and you can mark your Rent paid then.",
-            );
-          }
           if (rentOf(db, actor.memberId) === undefined) {
             return reply(
               "You have no Rent set. Ask an Admin to set it with /rent set.",
             );
           }
           if (paidRent(db, period).has(actor.memberId)) {
+            const next = nextRentPeriod(period);
             return reply(
               `You have already paid your Rent for ${monthName}. ` +
-                `The period for ${nameMonth(next.month)} starts on ${nameRentPeriodStart(next)}, and you can mark it paid then.`,
+                `You can mark your Rent for ${nameMonth(next.month)} paid from ${nameDay({ ...next.month, day: 1 })}.`,
             );
           }
-          payRent(db, { memberId: actor.memberId, period }, now());
-          const allPaid = markAllPaid(db, { period, roster }, now());
+          const announcements = payRent(
+            db,
+            { memberId: actor.memberId, period, roster },
+            now(),
+          );
           return {
             reply: {
               content: `Marked your Rent for ${monthName} paid.`,
               private: true,
             },
-            outbound: allPaid ? [allPaid] : [],
+            outbound: announcements,
           };
         }
       }

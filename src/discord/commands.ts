@@ -126,7 +126,7 @@ const commands = [
     .addSubcommand((sub) =>
       sub
         .setName("paid")
-        .setDescription("Mark your Rent paid for the current period"),
+        .setDescription("Mark your Rent paid for the current month"),
     ),
 
   // Hidden from members without the Administrator permission unless the server says otherwise;
@@ -159,7 +159,7 @@ const commands = [
       sub
         .setName("rent-paid")
         .setDescription(
-          "Mark a Housemate's Rent paid, or not paid, for the current period",
+          "Mark a Housemate's Rent paid, or not paid, for the current month",
         )
         .addUserOption((option) =>
           option

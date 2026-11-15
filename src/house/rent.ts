@@ -1,16 +1,10 @@
 import type Database from "better-sqlite3";
 import {
-  formatDate,
-  formatDateTime,
   formatMonth,
-  formatTime,
   lastDay,
-  nameDay,
   nameMonth,
   nextMonth,
-  previousMonth,
   type LocalDate,
-  type LocalDateTime,
   type Month,
 } from "./calendar.ts";
 import { stayingMembersIn, type Housemate } from "./housemates.ts";
@@ -75,62 +69,43 @@ export function formatDollars(cents: number): string {
   return dollarFormat.format(cents / 100);
 }
 
-/** Whether a Housemate has paid their Rent for the current rent period, flagged unless they have. */
-export type RentStatus = "paid" | "not paid" | "overdue";
-
 /**
  * A Housemate's line in the Rent list, flagging Rent that has not been set,
- * with their `status` for the current rent period if one has started.
+ * and whether they have paid for the current month if `paid` is given.
  */
 export function rentLine(
   housemate: Housemate,
   cents: number | undefined,
-  status?: RentStatus,
+  paid?: boolean,
 ): string {
   const who = `- ${mention(housemate.member.id)} (Floor ${String(housemate.floor)})`;
   if (cents === undefined) return `${who}: **no Rent set**`;
-  const flag =
-    status === undefined
-      ? ""
-      : status === "paid"
-        ? ", paid"
-        : `, **${status}**`;
+  const flag = paid === undefined ? "" : paid ? ", paid" : ", **not paid**";
   return `${who}: ${formatDollars(cents)}${flag}`;
 }
 
-/** The house time each rent period starts, and Rent Reminders go out every day. */
+/** The house time Rent Reminders go out every day. */
 export const rentReminderTime = { hour: 9, minute: 0 } as const;
 
-/**
- * The stretch in which one month's Rent is reminded of and paid, named after that month.
- * It runs from 09:00 three days before the end of the month before until the next one starts.
- */
+/** How many days before the Due Date Rent Reminders start. */
+const reminderDaysBeforeDue = 3;
+
+/** One calendar month's Rent, which is paid during that month and forgotten once it ends. */
 export interface RentPeriod {
   month: Month;
-  /** The month as YYYY-MM, which names the period in the database and the scheduler. */
+  /** The month as YYYY-MM, which names the period in the database. */
   key: string;
-  start: LocalDateTime;
+  /** The last day of the month. */
   due: LocalDate;
 }
 
 /** The rent period for `month`'s Rent. */
 export function rentPeriodFor(month: Month): RentPeriod {
-  const before = previousMonth(month);
   return {
     month: { year: month.year, month: month.month },
     key: formatMonth(month),
-    start: { ...before, day: lastDay(before) - 3, ...rentReminderTime },
-    due: { year: month.year, month: month.month, day: 1 },
+    due: { year: month.year, month: month.month, day: lastDay(month) },
   };
-}
-
-/** The rent period under way at `now`: the latest to have started. */
-export function rentPeriodAt(now: LocalDateTime): RentPeriod {
-  const next = rentPeriodFor(nextMonth(now));
-  // Both are YYYY-MM-DD HH:MM, so they compare as text.
-  return formatDateTime(now) >= formatDateTime(next.start)
-    ? next
-    : rentPeriodFor(now);
 }
 
 /** The rent period after `period`. */
@@ -138,46 +113,9 @@ export function nextRentPeriod(period: RentPeriod): RentPeriod {
   return rentPeriodFor(nextMonth(period.month));
 }
 
-/** When `period` starts, as Housemates read it, such as "November 27 at 09:00". */
-export function nameRentPeriodStart(period: RentPeriod): string {
-  return `${nameDay(period.start)} at ${formatTime(period.start)}`;
-}
-
-/** Whether `period`'s Rent is overdue on `date`: any day after its Due Date. */
-export function isRentOverdue(period: RentPeriod, date: LocalDate): boolean {
-  // Both are YYYY-MM-DD, so they compare as text.
-  return formatDate(date) > formatDate(period.due);
-}
-
-/** A Housemate's status for `period` on `date`, given whether they have paid. */
-export function rentStatus(
-  period: RentPeriod,
-  { paid, on }: { paid: boolean; on: LocalDate },
-): RentStatus {
-  if (paid) return "paid";
-  return isRentOverdue(period, on) ? "overdue" : "not paid";
-}
-
-/** Records that `period` has started, so its Rent can be reminded of and paid. */
-export function startRentPeriod(
-  db: Database.Database,
-  period: RentPeriod,
-): void {
-  db.prepare("INSERT OR IGNORE INTO rent_periods (month) VALUES (?)").run(
-    period.key,
-  );
-}
-
-/** Whether the bot has started `period`, which it does only for periods starting after it first ran. */
-export function hasRentPeriodStarted(
-  db: Database.Database,
-  period: RentPeriod,
-): boolean {
-  return (
-    db
-      .prepare<[string], 1>("SELECT 1 FROM rent_periods WHERE month = ?")
-      .get(period.key) !== undefined
-  );
+/** Whether Rent Reminders go out on `date`: from three days before its month's Due Date until the Due Date. */
+export function isRentReminderDay(date: LocalDate): boolean {
+  return date.day >= lastDay(date) - reminderDaysBeforeDue;
 }
 
 /** The member IDs of those who have paid their Rent for `period`. */
@@ -195,15 +133,31 @@ export function paidRent(
   );
 }
 
-/** Records that a member has paid their Rent for `period`, which must have started. */
+/**
+ * Records that a member has paid their Rent for `period`, returning the posts for #rent:
+ * that they have paid, then that everyone has if they were the last.
+ */
 export function payRent(
   db: Database.Database,
-  { memberId, period }: { memberId: string; period: RentPeriod },
+  {
+    memberId,
+    period,
+    roster,
+  }: { memberId: string; period: RentPeriod; roster: Roster },
   at: Date,
-): void {
+): Post[] {
+  db.prepare("INSERT OR IGNORE INTO rent_periods (month) VALUES (?)").run(
+    period.key,
+  );
   db.prepare(
     "INSERT INTO rent_payments (month, housemate_id, paid_at) VALUES (?, ?, ?)",
   ).run(period.key, memberId, at.toISOString());
+  const paid: Post = {
+    channel: "rent",
+    content: `${mention(memberId)} has paid their Rent for ${nameMonth(period.month)}.`,
+  };
+  const allPaid = markAllPaid(db, { period, roster }, at);
+  return allPaid ? [paid, allPaid] : [paid];
 }
 
 /** Removes a member's payment for `period`, so they owe its Rent again. */
@@ -218,7 +172,7 @@ export function unpayRent(
 
 /**
  * The first time every member in the roster with Rent who has not left has paid for `period`,
- * records it and returns the post for #chores saying so; otherwise undefined.
+ * records it and returns the post for #rent saying so; otherwise undefined.
  * Members who have left are not waited on, but members with both floor roles are.
  */
 export function markAllPaid(
@@ -232,7 +186,7 @@ export function markAllPaid(
     )
     .pluck()
     .get(period.key);
-  // Undefined when the period has not started, and a time once it has been marked.
+  // Undefined when nobody has paid for the period yet, and a time once it has been marked.
   if (marked !== null) return undefined;
 
   const amounts = rents(db);
@@ -246,7 +200,7 @@ export function markAllPaid(
     period.key,
   );
   return {
-    channel: "chores",
+    channel: "rent",
     content: `Everyone has paid their Rent for ${nameMonth(period.month)}.`,
   };
 }
