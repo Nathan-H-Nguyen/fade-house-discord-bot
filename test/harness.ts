@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { onTestFinished } from "vitest";
+import { helpText } from "../src/discord/commands.ts";
 import {
   openHouse,
   type Actor,
@@ -129,6 +130,7 @@ export function createTestHouse({
     timezone: "America/Los_Angeles",
     attachmentLimitBytes,
     isTestServer,
+    helpText: helpText({ isTestServer }),
     random: seededRandom(seed),
   });
 

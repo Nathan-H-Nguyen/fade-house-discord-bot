@@ -1,5 +1,6 @@
 import { readConfig } from "./config.ts";
 import { registerCommands, startBot } from "./discord/bot.ts";
+import { helpText } from "./discord/commands.ts";
 import { openHouse } from "./house/index.ts";
 
 /** The SQLite database, relative to the directory the bot is started from. */
@@ -13,6 +14,7 @@ const house = openHouse({
   // Discord's limit for bots in a server without boosts.
   attachmentLimitBytes: 10 * 1024 * 1024,
   isTestServer: config.isTestServer,
+  helpText: helpText(config),
 });
 
 await registerCommands(config);

@@ -8,6 +8,7 @@ The vocabulary (Housemate, Chore, Scope, Assignment and so on) is defined in [GL
 | Command                                        | Who        | What it does                                                                          |
 | ---------------------------------------------- | ---------- | ------------------------------------------------------------------------------------- |
 | `/ping`                                        | Anyone     | Confirms the bot is connected.                                                        |
+| `/help`                                        | Anyone     | Lists the commands Housemates can use, privately, leaving out Admin commands.         |
 | `/chore add <name> <scope>`                    | Housemates | Adds a Chore to the pool, with Scope Global, Floor 1 or Floor 3.                      |
 | `/chore edit <chore> [name] [scope]`           | Housemates | Renames a Chore or changes its Scope.                                                 |
 | `/chore retire <chore>`                        | Housemates | Takes a Chore out of the pool, keeping its history.                                   |

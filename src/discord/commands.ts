@@ -1,4 +1,5 @@
 import {
+  ApplicationCommandOptionType,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type SlashCommandSubcommandBuilder,
@@ -16,6 +17,10 @@ const commands = [
   new SlashCommandBuilder()
     .setName("ping")
     .setDescription("Check that the bot is connected"),
+
+  new SlashCommandBuilder()
+    .setName("help")
+    .setDescription("List the commands you can use"),
 
   new SlashCommandBuilder()
     .setName("chore")
@@ -233,4 +238,47 @@ export function commandDefinitions({
   return [...commands, ...(isTestServer ? [devCommand] : [])].map((command) =>
     command.toJSON(),
   );
+}
+
+/** Commands and subcommands left out of `/help`, because only Admins or the test server can use them. */
+const notInHelp = new Set(["rent set", "admin", "dev"]);
+
+/** The `/help` heading for each command, in the order the headings are shown. Any other command goes under `otherHeading`. */
+const helpHeadings: Record<string, string> = { chore: "Chores", rent: "Rent" };
+const otherHeading = "Other";
+
+/** The `/help` reply: each Housemate command with its options, required as `<name>` and optional as `[name]`. */
+export function helpText(config: Pick<Config, "isTestServer">): string {
+  const linesByHeading = new Map<string, string[]>(
+    [...Object.values(helpHeadings), otherHeading].map((heading) => [
+      heading,
+      [],
+    ]),
+  );
+  for (const command of commandDefinitions(config)) {
+    const subcommands = (command.options ?? []).flatMap((option) =>
+      option.type === ApplicationCommandOptionType.Subcommand
+        ? [{ ...option, name: `${command.name} ${option.name}` }]
+        : [],
+    );
+    const lines = linesByHeading.get(
+      helpHeadings[command.name] ?? otherHeading,
+    );
+    for (const { name, description, options = [] } of subcommands.length > 0
+      ? subcommands
+      : [command]) {
+      if (notInHelp.has(name) || notInHelp.has(command.name)) continue;
+      const usage = [
+        `/${name}`,
+        ...options.map((option) =>
+          option.required ? `<${option.name}>` : `[${option.name}]`,
+        ),
+      ].join(" ");
+      lines?.push(`\`${usage}\`: ${description}`);
+    }
+  }
+  return [...linesByHeading]
+    .filter(([, lines]) => lines.length > 0)
+    .map(([heading, lines]) => [`**${heading}**`, ...lines].join("\n"))
+    .join("\n\n");
 }
