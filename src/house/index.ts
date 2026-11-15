@@ -27,7 +27,12 @@ import {
   type StoredAssignment,
 } from "./assignments.ts";
 import { backUp } from "./backup.ts";
-import { reminderDay, remindOfChores } from "./chore-reminder.ts";
+import {
+  choreReminderTime,
+  midMonthReminderDay,
+  reminderDay,
+  remindOfChores,
+} from "./chore-reminder.ts";
 import {
   formatDateTime,
   formatMonth,
@@ -243,13 +248,35 @@ export function openHouse(options: {
         ),
     },
     {
-      name: "chore-reminder",
-      currentPeriod: monthly(9, 0, reminderDay),
+      name: "mid-month-chore-reminder",
+      currentPeriod: monthly(
+        choreReminderTime.hour,
+        choreReminderTime.minute,
+        () => midMonthReminderDay,
+      ),
       run: (period, roster) =>
         Promise.resolve(
           remindOfChores(db, {
+            reminder: "mid-month",
             month: period.start,
-            today: calendar.toLocal(now()),
+            now: calendar.toLocal(now()),
+            roster,
+          }),
+        ),
+    },
+    {
+      name: "chore-reminder",
+      currentPeriod: monthly(
+        choreReminderTime.hour,
+        choreReminderTime.minute,
+        reminderDay,
+      ),
+      run: (period, roster) =>
+        Promise.resolve(
+          remindOfChores(db, {
+            reminder: "week-left",
+            month: period.start,
+            now: calendar.toLocal(now()),
             roster,
           }),
         ),

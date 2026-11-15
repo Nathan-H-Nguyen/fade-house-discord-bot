@@ -1,5 +1,10 @@
 import { expect, test } from "vitest";
-import type { DirectMessage, Outbound, Scope } from "../src/house/index.ts";
+import type {
+  DirectMessage,
+  Member,
+  Outbound,
+  Scope,
+} from "../src/house/index.ts";
 import {
   createTestHouse,
   membersNamed,
@@ -37,18 +42,36 @@ async function houseIn(
   return house;
 }
 
-/** Moves the Clock to `time` and ticks, returning only the Chore Reminders sent. */
-async function remindersAt(
+/** Moves the Clock to `time` and ticks, returning only the Chore Reminders sent whose content matches `opening`. */
+async function choreRemindersAt(
   house: TestHouse,
   time: string,
-  members = membersNamed("Alice", "Chloe"),
+  opening: RegExp,
+  members: readonly Member[],
 ): Promise<DirectMessage[]> {
   house.setTime(time);
   const outbound: Outbound[] = await house.tick({ members });
   return outbound.filter(
-    (m): m is DirectMessage =>
-      "memberId" in m && m.content.startsWith("Reminder:"),
+    (m): m is DirectMessage => "memberId" in m && opening.test(m.content),
   );
+}
+
+/** Moves the Clock to `time` and ticks, returning only the week-left Chore Reminders sent. */
+function remindersAt(
+  house: TestHouse,
+  time: string,
+  members = membersNamed("Alice", "Chloe"),
+): Promise<DirectMessage[]> {
+  return choreRemindersAt(house, time, /^Reminder: a week is left/, members);
+}
+
+/** Moves the Clock to `time` and ticks, returning only the mid-month Chore Reminders sent. */
+function midMonthRemindersAt(
+  house: TestHouse,
+  time: string,
+  members = membersNamed("Alice", "Chloe"),
+): Promise<DirectMessage[]> {
+  return choreRemindersAt(house, time, /^Reminder: .* is half over\./, members);
 }
 
 test("at 09:00 seven days before the last day of the month, each Housemate is DMed their open Assignments", async () => {
@@ -205,4 +228,125 @@ test("a member with both floor roles is reminded of the Assignments they keep", 
       "- Kitchen (Global, overdue from November 2026)",
     ].join("\n"),
   );
+});
+
+test("at 09:00 on the 15th, each Housemate is DMed their open Assignments, saying the month is half over", async () => {
+  const house = await houseIn("2026-11");
+
+  expect(await midMonthRemindersAt(house, "2026-11-15T08:59:00-08:00")).toEqual(
+    [],
+  );
+  expect(await midMonthRemindersAt(house, "2026-11-15T09:00:00-08:00")).toEqual(
+    [
+      {
+        memberId: "1001",
+        content: [
+          "Reminder: November 2026 is half over. Your open Assignments:",
+          "- Bathroom (Floor 1)",
+          "- Kitchen (Global)",
+        ].join("\n"),
+        ifUndelivered: {
+          channel: "chores",
+          content: [
+            "Could not DM <@1001> their reminder. Their open Assignments, with November 2026 half over:",
+            "- Bathroom (Floor 1)",
+            "- Kitchen (Global)",
+          ].join("\n"),
+        },
+      },
+      {
+        memberId: "3001",
+        content: [
+          "Reminder: November 2026 is half over. Your open Assignments:",
+          "- Hallway (Floor 3)",
+          "- Stairs (Floor 3)",
+        ].join("\n"),
+        ifUndelivered: {
+          channel: "chores",
+          content: [
+            "Could not DM <@3001> their reminder. Their open Assignments, with November 2026 half over:",
+            "- Hallway (Floor 3)",
+            "- Stairs (Floor 3)",
+          ].join("\n"),
+        },
+      },
+    ],
+  );
+  expect(await remindersAt(house, "2026-11-23T09:00:00-08:00")).toHaveLength(2);
+});
+
+test("after downtime over the 15th, the mid-month reminder goes out once when the bot comes back", async () => {
+  const house = await houseIn("2026-11");
+
+  expect(await midMonthRemindersAt(house, "2026-11-14T09:00:00-08:00")).toEqual(
+    [],
+  );
+  expect(
+    await midMonthRemindersAt(house, "2026-11-23T08:59:00-08:00"),
+  ).toHaveLength(2);
+  expect(await midMonthRemindersAt(house, "2026-11-23T09:00:00-08:00")).toEqual(
+    [],
+  );
+});
+
+test("a mid-month reminder missed until the week-left reminder is due is not sent, but the week-left one is", async () => {
+  const house = await houseIn("2026-11");
+  house.setTime("2026-11-14T09:00:00-08:00");
+  await house.tick({ members: membersNamed("Alice", "Chloe") });
+
+  house.setTime("2026-11-23T09:00:00-08:00");
+  const outbound = await house.tick({
+    members: membersNamed("Alice", "Chloe"),
+  });
+
+  expect(
+    outbound.flatMap((m) =>
+      "memberId" in m ? [m.content.split("\n")[0]] : [],
+    ),
+  ).toEqual([
+    "Reminder: a week is left in November 2026. Your open Assignments:",
+    "Reminder: a week is left in November 2026. Your open Assignments:",
+  ]);
+});
+
+test("the mid-month reminder marks Overdue Assignments and skips members with nothing open or who have left", async () => {
+  const house = await houseIn("2026-11");
+  house.setTime("2026-12-01T00:05:00-08:00");
+  await house.tick({ members: membersNamed("Alice", "Chloe") });
+  await house.run("Alice", { name: "chore done", choreName: "Bathroom" });
+
+  // Chloe has left and Ben has nothing open, so only Alice is reminded, of her one Overdue Assignment left.
+  const reminders = await midMonthRemindersAt(
+    house,
+    "2026-12-15T09:00:00-08:00",
+    membersNamed("Alice", "Ben"),
+  );
+
+  expect(reminders.map((m) => [m.memberId, m.content])).toEqual([
+    [
+      "1001",
+      [
+        "Reminder: December 2026 is half over. Your open Assignments:",
+        "- Kitchen (Global, overdue from November 2026)",
+      ].join("\n"),
+    ],
+  ]);
+});
+
+test("the mid-month reminder goes out at most once per month, even across restarts", async () => {
+  const databasePath = temporaryPath("fade-house.db");
+  const first = await houseIn("2026-11", { databasePath });
+  expect(
+    await midMonthRemindersAt(first, "2026-11-15T09:00:00-08:00"),
+  ).toHaveLength(2);
+  await first.close();
+
+  const second = createTestHouse({
+    databasePath,
+    now: "2026-11-15T09:01:00-08:00",
+  });
+
+  expect(
+    await midMonthRemindersAt(second, "2026-11-15T09:01:00-08:00"),
+  ).toEqual([]);
 });
