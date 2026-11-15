@@ -1,8 +1,8 @@
 import type Database from "better-sqlite3";
 import { assignmentLine, openAssignmentsOf } from "./assignments.ts";
 import {
-  formatDateTime,
   formatMonth,
+  isAtOrAfter,
   lastDay,
   nameMonth,
   type LocalDateTime,
@@ -12,19 +12,30 @@ import { stayingMembersIn } from "./housemates.ts";
 import type { DirectMessage, Roster } from "./index.ts";
 import { mention } from "./markdown.ts";
 
-/** The house time both Chore Reminders go out. */
-export const choreReminderTime = { hour: 9, minute: 0 } as const;
-
-/** The day of each month the mid-month Chore Reminder goes out. */
-export const midMonthReminderDay = 15;
-
-/** The day of `month` the week-left Chore Reminder goes out: seven days before its last day. */
-export function weekLeftReminderDay(month: Month): number {
-  return lastDay(month) - 7;
-}
-
 /** Which of a month's two Chore Reminders is sent: the one on the 15th, or the one with a week left. */
 export type ChoreReminder = "mid-month" | "week-left";
+
+/** The house time both Chore Reminders go out. */
+const choreReminderTime = { hour: 9, minute: 0 } as const;
+
+/** The day of `month` each Chore Reminder goes out: the 15th, or seven days before its last day. */
+const choreReminderDay: Record<ChoreReminder, (month: Month) => number> = {
+  "mid-month": () => 15,
+  "week-left": (month) => lastDay(month) - 7,
+};
+
+/** When `reminder` goes out in `month`. */
+export function choreReminderStart(
+  reminder: ChoreReminder,
+  month: Month,
+): LocalDateTime {
+  return {
+    year: month.year,
+    month: month.month,
+    day: choreReminderDay[reminder](month),
+    ...choreReminderTime,
+  };
+}
 
 /** How each Chore Reminder describes how far through `monthName` it is, in the DM and in the fallback post. */
 const progress: Record<
@@ -64,15 +75,9 @@ export function remindOfChores(
 ): DirectMessage[] {
   const key = formatMonth(month);
   if (formatMonth(now) !== key) return [];
-  const weekLeftStart = {
-    ...month,
-    day: weekLeftReminderDay(month),
-    ...choreReminderTime,
-  };
-  // Both are YYYY-MM-DD HH:MM, so they compare as text.
   if (
     reminder === "mid-month" &&
-    formatDateTime(now) >= formatDateTime(weekLeftStart)
+    isAtOrAfter(now, choreReminderStart("week-left", month))
   ) {
     return [];
   }

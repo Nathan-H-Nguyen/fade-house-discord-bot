@@ -28,10 +28,9 @@ import {
 } from "./assignments.ts";
 import { backUp } from "./backup.ts";
 import {
-  choreReminderTime,
-  midMonthReminderDay,
-  weekLeftReminderDay,
+  choreReminderStart,
   remindOfChores,
+  type ChoreReminder,
 } from "./chore-reminder.ts";
 import {
   formatDateTime,
@@ -232,10 +231,32 @@ export function openHouse(options: {
 
   const monthlyAssignment = "monthly-assignment";
 
+  function choreReminderJob(name: string, reminder: ChoreReminder): Job {
+    return {
+      name,
+      currentPeriod: monthly((month) => choreReminderStart(reminder, month)),
+      run: (period, roster) =>
+        Promise.resolve(
+          remindOfChores(db, {
+            reminder,
+            month: period.start,
+            now: calendar.toLocal(now()),
+            roster,
+          }),
+        ),
+    };
+  }
+
   const jobs: Job[] = [
     {
       name: monthlyAssignment,
-      currentPeriod: monthly(0, 5),
+      currentPeriod: monthly(({ year, month }) => ({
+        year,
+        month,
+        day: 1,
+        hour: 0,
+        minute: 5,
+      })),
       run: (period, roster) =>
         Promise.resolve(
           assignMonth(db, {
@@ -247,40 +268,9 @@ export function openHouse(options: {
           }),
         ),
     },
-    {
-      name: "mid-month-chore-reminder",
-      currentPeriod: monthly(
-        choreReminderTime.hour,
-        choreReminderTime.minute,
-        () => midMonthReminderDay,
-      ),
-      run: (period, roster) =>
-        Promise.resolve(
-          remindOfChores(db, {
-            reminder: "mid-month",
-            month: period.start,
-            now: calendar.toLocal(now()),
-            roster,
-          }),
-        ),
-    },
-    {
-      name: "chore-reminder",
-      currentPeriod: monthly(
-        choreReminderTime.hour,
-        choreReminderTime.minute,
-        weekLeftReminderDay,
-      ),
-      run: (period, roster) =>
-        Promise.resolve(
-          remindOfChores(db, {
-            reminder: "week-left",
-            month: period.start,
-            now: calendar.toLocal(now()),
-            roster,
-          }),
-        ),
-    },
+    // The scheduler's ledger is keyed by job name, so renaming either would re-send or skip a month.
+    choreReminderJob("mid-month-chore-reminder", "mid-month"),
+    choreReminderJob("chore-reminder", "week-left"),
     {
       name: "rent-reminder",
       currentPeriod: daily(rentReminderTime.hour, rentReminderTime.minute),
