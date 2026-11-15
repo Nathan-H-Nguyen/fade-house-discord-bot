@@ -48,28 +48,13 @@ export function daily(hour: number, minute: number): Job["currentPeriod"] {
   };
 }
 
-/**
- * Periods of one month, each starting at `hour`:`minute` on the day `dayOf` picks, the 1st unless given,
- * and named by its month.
- */
+/** Periods of one month, each starting at the time `startOf` gives for that month, and named by its month. */
 export function monthly(
-  hour: number,
-  minute: number,
-  dayOf: (month: Month) => number = () => 1,
+  startOf: (month: Month) => LocalDateTime,
 ): Job["currentPeriod"] {
-  const start = (month: Month): LocalDateTime => ({
-    year: month.year,
-    month: month.month,
-    day: dayOf(month),
-    hour,
-    minute,
-  });
   return (now) => {
-    const day = dayOf(now);
-    const started =
-      now.day > day || (now.day === day && startedBy(now, hour, minute));
-    const month = started ? now : previousMonth(now);
-    return { key: formatMonth(month), start: start(month) };
+    const month = isAtOrAfter(now, startOf(now)) ? now : previousMonth(now);
+    return { key: formatMonth(month), start: startOf(month) };
   };
 }
 
@@ -119,8 +104,8 @@ export async function runDueJobs(
   for (const job of jobs) {
     see.run(job.name, formatDateTime(now));
     const period = job.currentPeriod(now);
-    const seenSince = parseDateTime(since.get(job.name) ?? "");
-    if (seenSince && !isAtOrAfter(period.start, seenSince)) continue;
+    const scheduledSince = parseDateTime(since.get(job.name) ?? "");
+    if (scheduledSince && !isAtOrAfter(period.start, scheduledSince)) continue;
     if (hasRun.get(job.name, period.key)) continue;
     outbound.push(...(await job.run(period, roster)));
     record.run(job.name, period.key, completedAt.toISOString());

@@ -28,8 +28,7 @@ import {
 } from "./assignments.ts";
 import { backUp } from "./backup.ts";
 import {
-  choreReminderDay,
-  choreReminderTime,
+  choreReminderStart,
   remindOfChores,
   type ChoreReminder,
 } from "./chore-reminder.ts";
@@ -235,11 +234,7 @@ export function openHouse(options: {
   function choreReminderJob(name: string, reminder: ChoreReminder): Job {
     return {
       name,
-      currentPeriod: monthly(
-        choreReminderTime.hour,
-        choreReminderTime.minute,
-        choreReminderDay[reminder],
-      ),
+      currentPeriod: monthly((month) => choreReminderStart(reminder, month)),
       run: (period, roster) =>
         Promise.resolve(
           remindOfChores(db, {
@@ -255,7 +250,13 @@ export function openHouse(options: {
   const jobs: Job[] = [
     {
       name: monthlyAssignment,
-      currentPeriod: monthly(0, 5),
+      currentPeriod: monthly(({ year, month }) => ({
+        year,
+        month,
+        day: 1,
+        hour: 0,
+        minute: 5,
+      })),
       run: (period, roster) =>
         Promise.resolve(
           assignMonth(db, {

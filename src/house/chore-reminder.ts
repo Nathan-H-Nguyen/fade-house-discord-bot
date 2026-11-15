@@ -16,17 +16,16 @@ import { mention } from "./markdown.ts";
 export type ChoreReminder = "mid-month" | "week-left";
 
 /** The house time both Chore Reminders go out. */
-export const choreReminderTime = { hour: 9, minute: 0 } as const;
+const choreReminderTime = { hour: 9, minute: 0 } as const;
 
 /** The day of `month` each Chore Reminder goes out: the 15th, or seven days before its last day. */
-export const choreReminderDay: Record<ChoreReminder, (month: Month) => number> =
-  {
-    "mid-month": () => 15,
-    "week-left": (month) => lastDay(month) - 7,
-  };
+const choreReminderDay: Record<ChoreReminder, (month: Month) => number> = {
+  "mid-month": () => 15,
+  "week-left": (month) => lastDay(month) - 7,
+};
 
 /** When `reminder` goes out in `month`. */
-function choreReminderStart(
+export function choreReminderStart(
   reminder: ChoreReminder,
   month: Month,
 ): LocalDateTime {
