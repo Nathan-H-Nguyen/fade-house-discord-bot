@@ -93,6 +93,7 @@ export interface Actor {
 
 export type Command =
   | { name: "ping" }
+  | { name: "help" }
   | { name: "chore add"; choreName: string; scope: Scope }
   | { name: "chore list" }
   | { name: "chore mine" }
@@ -207,6 +208,8 @@ export function openHouse(options: {
   attachmentLimitBytes: number;
   /** Whether the bot is running in the test server, which enables the `/dev` commands. */
   isTestServer: boolean;
+  /** The reply to `/help`, listing the commands Housemates can use. */
+  helpText: string;
   /** The source of randomness for handing out Chores. Defaults to `Math.random`. */
   random?: Random;
 }): House {
@@ -381,6 +384,7 @@ export function openHouse(options: {
     async handle({ actor, roster, command }) {
       if (command.name === "ping")
         return reply("Pong! Fade House bot is connected.");
+      if (command.name === "help") return reply(options.helpText);
 
       if (command.name === "dev now" || command.name === "dev advance-to") {
         if (!options.isTestServer) {

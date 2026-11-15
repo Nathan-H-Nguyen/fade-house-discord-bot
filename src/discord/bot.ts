@@ -294,6 +294,8 @@ function toCommand(interaction: ChatInputCommandInteraction): Command {
   switch (name) {
     case "ping":
       return { name: "ping" };
+    case "help":
+      return { name: "help" };
     case "chore add":
       return {
         name: "chore add",

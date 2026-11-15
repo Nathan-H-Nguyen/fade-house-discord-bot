@@ -12,13 +12,13 @@ function subcommandsOf(isTestServer: boolean, command: string): string[] {
 test("outside the test server no /dev commands are registered", () => {
   const names = commandDefinitions({ isTestServer: false }).map((c) => c.name);
 
-  expect(names).toEqual(["ping", "chore", "rent", "admin"]);
+  expect(names).toEqual(["ping", "help", "chore", "rent", "admin"]);
 });
 
 test("in the test server /dev now and /dev advance-to are registered", () => {
   const names = commandDefinitions({ isTestServer: true }).map((c) => c.name);
 
-  expect(names).toEqual(["ping", "chore", "rent", "admin", "dev"]);
+  expect(names).toEqual(["ping", "help", "chore", "rent", "admin", "dev"]);
   expect(subcommandsOf(true, "dev")).toEqual(["advance-to", "now"]);
 });
 
