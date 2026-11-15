@@ -19,7 +19,7 @@ export const choreReminderTime = { hour: 9, minute: 0 } as const;
 export const midMonthReminderDay = 15;
 
 /** The day of `month` the week-left Chore Reminder goes out: seven days before its last day. */
-export function reminderDay(month: Month): number {
+export function weekLeftReminderDay(month: Month): number {
   return lastDay(month) - 7;
 }
 
@@ -66,7 +66,7 @@ export function remindOfChores(
   if (formatMonth(now) !== key) return [];
   const weekLeftStart = {
     ...month,
-    day: reminderDay(month),
+    day: weekLeftReminderDay(month),
     ...choreReminderTime,
   };
   // Both are YYYY-MM-DD HH:MM, so they compare as text.
