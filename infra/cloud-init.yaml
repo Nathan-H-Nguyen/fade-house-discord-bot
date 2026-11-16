@@ -1,0 +1,151 @@
+#cloud-config
+# Container-Optimized OS resets /etc on every boot and runs this file again, so it is the VM's whole setup.
+# Terraform fills in registry, repository and secret; every other dollar sign is left for the shell.
+
+write_files:
+  # Formats the data disk only if it is blank, then mounts it at /mnt/disks/data.
+  - path: /etc/fade-house/mount-data.sh
+    permissions: "0644"
+    content: |
+      set -euo pipefail
+      dev=/dev/disk/by-id/google-fade-house-data
+      udevadm settle
+      if [ ! -b "$dev" ]; then
+        echo "Data disk $dev is not attached." >&2
+        exit 1
+      fi
+      # blkid exits 2 only when the disk holds no filesystem; anything else is not safe to format.
+      rc=0
+      blkid -p "$dev" >/dev/null || rc=$?
+      if [ "$rc" -eq 2 ]; then
+        echo "Formatting blank data disk $dev"
+        mkfs.ext4 -m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard "$dev"
+      elif [ "$rc" -ne 0 ]; then
+        echo "Cannot probe $dev (blkid exited $rc), so refusing to format it." >&2
+        exit 1
+      fi
+      mkdir -p /mnt/disks/data
+      mountpoint -q /mnt/disks/data || mount -o discard,defaults "$dev" /mnt/disks/data
+      # The container runs as the node user, uid 1000.
+      chown 1000:1000 /mnt/disks/data
+
+  # Succeeds only once a deploy has set an image, so the bot stays stopped until then.
+  - path: /etc/fade-house/has-image.sh
+    permissions: "0644"
+    content: |
+      set -euo pipefail
+      image=$(curl -fsS -H 'Metadata-Flavor: Google' \
+        http://metadata.google.internal/computeMetadata/v1/instance/attributes/fade-house-image)
+      [ -n "$image" ]
+
+  # Fetches the image to run and the bot's env from Secret Manager into /run, which is memory only.
+  - path: /etc/fade-house/prepare.sh
+    permissions: "0644"
+    content: |
+      set -euo pipefail
+      umask 077
+      md() {
+        curl -fsS -H 'Metadata-Flavor: Google' "http://metadata.google.internal/computeMetadata/v1/$1"
+      }
+      install -d -m 700 /run/fade-house
+
+      image=$(md instance/attributes/fade-house-image)
+      case "$image" in
+        ${repository}/*) ;;
+        *)
+          echo "Refusing to run image \"$image\" from outside ${repository}." >&2
+          exit 1
+          ;;
+      esac
+      printf '%s\n' "$image" >/run/fade-house/image
+
+      token=$(md instance/service-accounts/default/token |
+        sed -E 's/.*"access_token" *: *"([^"]*)".*/\1/')
+      curl -fsS -H "Authorization: Bearer $token" \
+        "https://secretmanager.googleapis.com/v1/${secret}/versions/latest:access" |
+        grep -o '"data" *: *"[^"]*"' | sed -E 's/.*"([^"]*)"$/\1/' | base64 -d >/run/fade-house/env
+
+      printf '%s' "$token" |
+        docker --config /run/fade-house/docker login -u oauth2accesstoken --password-stdin https://${registry}
+
+  # The database path is set here, after the env file, so a stray DATABASE_PATH in the secret cannot move it off the disk.
+  - path: /etc/fade-house/run.sh
+    permissions: "0644"
+    content: |
+      set -euo pipefail
+      exec docker --config /run/fade-house/docker run --rm --name fade-house \
+        --env-file /run/fade-house/env \
+        -e DATABASE_PATH=/data/fade-house.db \
+        -v /mnt/disks/data:/data \
+        "$(cat /run/fade-house/image)"
+
+  # Restarts the bot whenever a deploy changes the image in the VM's metadata.
+  - path: /etc/fade-house/watch-image.sh
+    permissions: "0644"
+    content: |
+      set -uo pipefail
+      url=http://metadata.google.internal/computeMetadata/v1/instance/attributes/fade-house-image
+      etag() {
+        curl -fsS -D - -o /dev/null -H 'Metadata-Flavor: Google' "$1" | tr -d '\r' | sed -n 's/^[Ee][Tt]ag: //p'
+      }
+      until last=$(etag "$url") && [ -n "$last" ]; do sleep 10; done
+      while true; do
+        now=$(etag "$url?wait_for_change=true&timeout_sec=600&last_etag=$last")
+        if [ -z "$now" ]; then
+          sleep 10
+        elif [ "$now" != "$last" ]; then
+          last=$now
+          echo "Image changed, restarting the bot"
+          systemctl restart fade-house.service
+        fi
+      done
+
+  - path: /etc/systemd/system/fade-house-data.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Mount the Fade House data disk
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/bash /etc/fade-house/mount-data.sh
+
+  - path: /etc/systemd/system/fade-house.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Fade House Discord bot
+      Requires=fade-house-data.service docker.service
+      After=fade-house-data.service docker.service network-online.target
+      Wants=network-online.target
+      StartLimitIntervalSec=0
+
+      [Service]
+      ExecCondition=/bin/bash /etc/fade-house/has-image.sh
+      ExecStartPre=/bin/bash /etc/fade-house/prepare.sh
+      ExecStartPre=-/usr/bin/docker rm -f fade-house
+      ExecStart=/bin/bash /etc/fade-house/run.sh
+      # SIGTERM first, so the bot closes the database cleanly.
+      ExecStop=/usr/bin/docker stop -t 30 fade-house
+      TimeoutStartSec=300
+      TimeoutStopSec=45
+      Restart=always
+      RestartSec=10
+
+  - path: /etc/systemd/system/fade-house-watch-image.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Restart the Fade House bot when a deploy changes its image
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      ExecStart=/bin/bash /etc/fade-house/watch-image.sh
+      Restart=always
+      RestartSec=10
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl start fade-house-data.service fade-house.service fade-house-watch-image.service
