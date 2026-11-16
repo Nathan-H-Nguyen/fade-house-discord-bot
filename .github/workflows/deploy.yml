@@ -1,0 +1,54 @@
+name: Deploy
+
+# Points the production VM at a built image; the VM restarts the bot on it within a few seconds.
+# Runs in the "production" environment, so it waits for your approval, and only from main.
+# To roll back, run it again with an earlier commit's SHA.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full SHA of the commit whose image to run. Leave empty for the most recently built image.
+        required: false
+
+permissions:
+  contents: read
+  id-token: write # For Workload Identity Federation, which only trusts the production environment.
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: us-west1-docker.pkg.dev/fade-house-bot/fade-house/bot
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: projects/914047471237/locations/global/workloadIdentityPools/github/providers/fade-house-discord-bot
+          service_account: fade-house-deploy@fade-house-bot.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Choose the image
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          sha=$INPUT_SHA
+          if [ -z "$sha" ]; then
+            sha=$(gcloud artifacts docker images list "$IMAGE" --include-tags \
+              --sort-by=~CREATE_TIME --limit=1 --format='value(tags)')
+          fi
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::\"$sha\" is not a full commit SHA."
+            exit 1
+          fi
+          gcloud artifacts docker images describe "$IMAGE:$sha" >/dev/null
+          echo "IMAGE_REF=$IMAGE:$sha" >> "$GITHUB_ENV"
+      - name: Point the VM at the image
+        run: |
+          gcloud compute instances add-metadata fade-house \
+            --project fade-house-bot --zone us-west1-b \
+            --metadata "fade-house-image=$IMAGE_REF"
+      - run: echo "Deployed \`$IMAGE_REF\`. Run \`/ping\` in the server to check the bot is back." >> "$GITHUB_STEP_SUMMARY"

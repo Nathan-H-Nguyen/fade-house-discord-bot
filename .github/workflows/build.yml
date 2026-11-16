@@ -1,0 +1,38 @@
+name: Build
+
+# Builds the bot's image on every change to main that affects it, tagged with the commit's SHA.
+# Building never deploys: run the Deploy workflow to change what production runs.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - package.json
+      - package-lock.json
+      - Dockerfile
+      - .dockerignore
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # For Workload Identity Federation, which only trusts runs on main.
+
+env:
+  IMAGE: us-west1-docker.pkg.dev/fade-house-bot/fade-house/bot
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: projects/914047471237/locations/global/workloadIdentityPools/github/providers/fade-house-discord-bot
+          service_account: fade-house-build@fade-house-bot.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - run: gcloud auth configure-docker us-west1-docker.pkg.dev --quiet
+      - run: docker build --tag "$IMAGE:$GITHUB_SHA" .
+      - run: docker push "$IMAGE:$GITHUB_SHA"
+      - run: echo "Built \`$IMAGE:$GITHUB_SHA\`. Run the Deploy workflow to put it in production." >> "$GITHUB_STEP_SUMMARY"

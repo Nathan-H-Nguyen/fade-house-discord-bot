@@ -255,6 +255,18 @@ On the VM, `sudo journalctl -u fade-house -f` follows the bot's logs and `sudo s
 The logs are also in the Cloud Console's Logs Explorer.
 The bot stays stopped until the first deploy sets the image it should run.
 
+### Deploying
+
+Every change to `main` that touches the bot (`src/`, the npm files or the Dockerfile) runs the **Build** workflow, which pushes an image tagged with the commit's SHA.
+Building never changes production.
+
+To deploy, run the **Deploy** workflow from the Actions tab on `main`, and approve it when GitHub asks: it runs in the `production` environment, which waits for your approval.
+Leave the SHA empty for the most recently built image, or give a full commit SHA to run that commit's image.
+The VM notices the change and restarts the bot on the new image within a few seconds; run `/ping` to check it is back.
+
+To roll back, deploy an earlier commit's SHA.
+The registry keeps only the 5 most recent images; to go back further, revert the change on `main`, which builds a new image to deploy.
+
 ## Environment variables
 
 `npm start` reads them from `.env` if it exists, otherwise from the environment.
