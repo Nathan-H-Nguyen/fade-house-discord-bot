@@ -34,6 +34,8 @@ resource "google_compute_resource_policy" "weekly_snapshot" {
       storage_locations = [var.region]
     }
   }
+
+  depends_on = [google_project_service.services]
 }
 
 resource "google_compute_disk_resource_policy_attachment" "data_snapshot" {

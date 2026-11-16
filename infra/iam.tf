@@ -2,6 +2,8 @@
 resource "google_service_account" "vm" {
   account_id   = "fade-house-vm"
   display_name = "Fade House bot VM"
+
+  depends_on = [google_project_service.services]
 }
 
 resource "google_artifact_registry_repository_iam_member" "vm_pull" {
