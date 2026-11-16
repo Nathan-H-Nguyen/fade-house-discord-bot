@@ -218,6 +218,14 @@ terraform plan
 terraform apply
 ```
 
+After the first apply, delete the `default` network that enabling Compute Engine creates, as it allows SSH and RDP from anywhere and nothing uses it:
+
+```sh
+gcloud compute firewall-rules list --project fade-house-bot --filter=network=default --format='value(name)' |
+  xargs gcloud compute firewall-rules delete --project fade-house-bot --quiet
+gcloud compute networks delete default --project fade-house-bot --quiet
+```
+
 The data disk, which holds the database, has `prevent_destroy`, so no plan can delete it.
 The VM is disposable: replacing it keeps the disk.
 Changes to `infra/cloud-init.yaml` take effect when the VM next boots.
