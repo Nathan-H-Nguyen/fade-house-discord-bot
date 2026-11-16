@@ -1,19 +1,37 @@
 # Keeps dependencies, the SHA-pinned actions, the Terraform provider and the base image current.
+# Updates are grouped into one PR per ecosystem each month to keep the noise down.
+# npm major versions are left to us, as they tend to need code or tooling changes;
+# Dependabot security updates still cover vulnerable packages of any version.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      npm:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
   - package-ecosystem: terraform
     directory: /infra
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      terraform:
+        patterns: ["*"]
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      docker:
+        patterns: ["*"]
