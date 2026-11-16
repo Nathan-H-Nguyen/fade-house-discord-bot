@@ -7,6 +7,8 @@ export interface Config {
   adminChannelId: string;
   /** IANA name of the house timezone, which defines months and job times. */
   timezone: string;
+  /** Path of the SQLite database file. */
+  databasePath: string;
   /** Whether the bot is running in the test server, which enables the `/dev` commands. */
   isTestServer: boolean;
 }
@@ -32,6 +34,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     rentChannelId: required("RENT_CHANNEL_ID"),
     adminChannelId: required("ADMIN_CHANNEL_ID"),
     timezone: env["TIMEZONE"]?.trim() || "America/Los_Angeles",
+    databasePath: env["DATABASE_PATH"]?.trim() || "fade-house.db",
     isTestServer: false,
   };
 

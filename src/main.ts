@@ -3,12 +3,9 @@ import { registerCommands, startBot } from "./discord/bot.ts";
 import { helpText } from "./discord/commands.ts";
 import { openHouse } from "./house/index.ts";
 
-/** The SQLite database, relative to the directory the bot is started from. */
-const databasePath = "fade-house.db";
-
 const config = readConfig();
 const house = openHouse({
-  databasePath,
+  databasePath: config.databasePath,
   clock: { now: () => new Date() },
   timezone: config.timezone,
   // Discord's limit for bots in a server without boosts.

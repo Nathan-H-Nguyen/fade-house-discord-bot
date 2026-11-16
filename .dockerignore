@@ -1,0 +1,18 @@
+.git
+.github
+node_modules
+docs
+test
+old
+coverage
+dist
+
+# Secrets and data stay out of the image
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
