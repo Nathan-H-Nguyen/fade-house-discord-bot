@@ -37,7 +37,7 @@ jobs:
         run: |
           sha=$INPUT_SHA
           if [ -z "$sha" ]; then
-            sha=$(gcloud artifacts docker images list "$IMAGE" --include-tags \
+            sha=$(gcloud artifacts docker images list "$IMAGE" --include-tags --filter='tags:*' \
               --sort-by=~CREATE_TIME --limit=1 --format='value(tags)')
           fi
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
