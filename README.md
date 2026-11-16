@@ -201,13 +201,51 @@ To take a backup by hand from the volume, see Backups, running `sqlite3` against
 
 Production runs on Google Cloud, in the `fade-house-bot` project: see [ADR 0001](docs/adr/0001-host-on-a-compute-engine-vm.md) for why a Compute Engine VM.
 Its resources are defined with Terraform, whose state lives in the versioned bucket `gs://fade-house-bot-tfstate`.
-That bucket is the one resource made by hand, once, before Terraform can run:
+That bucket, and the APIs Terraform uses to read the project and its billing account, are made by hand, once, before Terraform can run:
 
 ```sh
 gcloud storage buckets create gs://fade-house-bot-tfstate --project fade-house-bot \
   --location us-west1 --uniform-bucket-level-access --public-access-prevention
 gcloud storage buckets update gs://fade-house-bot-tfstate --versioning
+gcloud services enable cloudresourcemanager.googleapis.com cloudbilling.googleapis.com --project fade-house-bot
 ```
+
+Then, from `infra/`, review what would change and apply it:
+
+```sh
+terraform init
+terraform plan
+terraform apply
+```
+
+The data disk, which holds the database, has `prevent_destroy`, so no plan can delete it.
+The VM is disposable: replacing it keeps the disk.
+Changes to `infra/cloud-init.yaml` take effect when the VM next boots.
+
+### Configuring the bot in production
+
+The bot's environment variables live in the Secret Manager secret `fade-house-env`, written exactly like `.env`.
+Terraform creates the secret but never its value, so the token stays out of Terraform state.
+To set or change them, write them to a file outside the repo and add it as a new version:
+
+```sh
+gcloud secrets versions add fade-house-env --project fade-house-bot --data-file=<path to the file>
+```
+
+Then delete the file, and restart the bot to pick up the change.
+`DATABASE_PATH` is ignored there: the database is always on the data disk.
+
+### Reaching the VM
+
+The VM accepts no traffic from the internet; SSH goes through Identity-Aware Proxy, using your Google login:
+
+```sh
+gcloud compute ssh fade-house --project fade-house-bot --zone us-west1-b --tunnel-through-iap
+```
+
+On the VM, `sudo journalctl -u fade-house -f` follows the bot's logs and `sudo systemctl restart fade-house` restarts it.
+The logs are also in the Cloud Console's Logs Explorer.
+The bot stays stopped until the first deploy sets the image it should run.
 
 ## Environment variables
 
