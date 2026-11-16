@@ -33,6 +33,7 @@ jobs:
           service_account: fade-house-build@fade-house-bot.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
       - run: gcloud auth configure-docker us-west1-docker.pkg.dev --quiet
-      - run: docker build --tag "$IMAGE:$GITHUB_SHA" .
+      # Without a provenance attestation, each build is one registry entry, so "keep the 5 newest" means 5 images.
+      - run: docker build --provenance=false --tag "$IMAGE:$GITHUB_SHA" .
       - run: docker push "$IMAGE:$GITHUB_SHA"
       - run: echo "Built \`$IMAGE:$GITHUB_SHA\`. Run the Deploy workflow to put it in production." >> "$GITHUB_STEP_SUMMARY"
