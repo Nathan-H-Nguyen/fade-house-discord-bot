@@ -131,7 +131,11 @@ write_files:
       TimeoutStartSec=300
       TimeoutStopSec=45
       Restart=always
-      RestartSec=10
+      # Discord resets a bot's token after about 1000 logins in a day, so a crash loop must stay well under that:
+      # 2 minutes apart is at most 720 a day, backing off to 15 minutes where systemd supports it.
+      RestartSec=120
+      RestartSteps=5
+      RestartMaxDelaySec=900
 
   - path: /etc/systemd/system/fade-house-watch-image.service
     permissions: "0644"

@@ -22,3 +22,13 @@ resource "google_project_iam_member" "vm_logs" {
   role    = "roles/logging.logWriter"
   member  = google_service_account.vm.member
 }
+
+# Enabling Compute Engine creates a default service account with the Editor role on the project.
+# Nothing uses it, so strip its roles rather than leave a powerful identity lying around.
+resource "google_project_default_service_accounts" "deprivilege" {
+  project        = var.project_id
+  action         = "DEPRIVILEGE"
+  restore_policy = "NONE"
+
+  depends_on = [google_project_service.services]
+}
