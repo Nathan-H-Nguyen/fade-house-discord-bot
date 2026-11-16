@@ -201,13 +201,13 @@ To take a backup by hand from the volume, see Backups, running `sqlite3` against
 
 Production runs on Google Cloud, in the `fade-house-bot` project: see [ADR 0001](docs/adr/0001-host-on-a-compute-engine-vm.md) for why a Compute Engine VM.
 Its resources are defined with Terraform, whose state lives in the versioned bucket `gs://fade-house-bot-tfstate`.
-That bucket, and the API Terraform uses to read the project, are made by hand, once, before Terraform can run:
+That bucket, and the APIs Terraform uses to read the project and its billing account, are made by hand, once, before Terraform can run:
 
 ```sh
 gcloud storage buckets create gs://fade-house-bot-tfstate --project fade-house-bot \
   --location us-west1 --uniform-bucket-level-access --public-access-prevention
 gcloud storage buckets update gs://fade-house-bot-tfstate --versioning
-gcloud services enable cloudresourcemanager.googleapis.com --project fade-house-bot
+gcloud services enable cloudresourcemanager.googleapis.com cloudbilling.googleapis.com --project fade-house-bot
 ```
 
 Then, from `infra/`, review what would change and apply it:
