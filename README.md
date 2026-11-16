@@ -197,6 +197,18 @@ Compose keeps the database in a named volume, `data`.
 Stop the container with `docker compose stop`, which sends SIGTERM and lets the bot shut down cleanly.
 To take a backup by hand from the volume, see Backups, running `sqlite3` against the file in the container.
 
+## Hosting
+
+Production runs on Google Cloud, in the `fade-house-bot` project: see [ADR 0001](docs/adr/0001-host-on-a-compute-engine-vm.md) for why a Compute Engine VM.
+Its resources are defined with Terraform, whose state lives in the versioned bucket `gs://fade-house-bot-tfstate`.
+That bucket is the one resource made by hand, once, before Terraform can run:
+
+```sh
+gcloud storage buckets create gs://fade-house-bot-tfstate --project fade-house-bot \
+  --location us-west1 --uniform-bucket-level-access --public-access-prevention
+gcloud storage buckets update gs://fade-house-bot-tfstate --versioning
+```
+
 ## Environment variables
 
 `npm start` reads them from `.env` if it exists, otherwise from the environment.
