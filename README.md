@@ -181,6 +181,22 @@ Everything since the backup was taken is lost, and scheduled jobs that ran since
 The database is the SQLite file `fade-house.db` in the directory the bot is started from.
 It is ignored by git.
 
+## Running in Docker
+
+The `Dockerfile` builds an image that runs the bot as the unprivileged `node` user.
+The database lives at `/data/fade-house.db`, so mount a volume at `/data` or it is lost with the container.
+Pass the environment variables (see below) at run time; none are baked into the image.
+
+To try it locally with the values from `.env`:
+
+```sh
+docker compose up --build
+```
+
+Compose keeps the database in a named volume, `data`.
+Stop the container with `docker compose stop`, which sends SIGTERM and lets the bot shut down cleanly.
+To take a backup by hand from the volume, see Backups, running `sqlite3` against the file in the container.
+
 ## Environment variables
 
 `npm start` reads them from `.env` if it exists, otherwise from the environment.
@@ -194,6 +210,7 @@ It is ignored by git.
 | `RENT_CHANNEL_ID`        | Yes      | The #rent channel, for Rent payments and the all-paid message.                                    |
 | `ADMIN_CHANNEL_ID`       | Yes      | The #bot-admin channel, for admin logs, warnings and backups.                                     |
 | `TIMEZONE`               | No       | The house's IANA timezone, which defines months and job times. Defaults to `America/Los_Angeles`. |
+| `DATABASE_PATH`          | No       | The SQLite database file. Defaults to `fade-house.db` in the directory the bot is started from.   |
 | `IS_TEST_SERVER`         | No       | `true` only in the test server, to enable the `/dev` commands. Defaults to `false`.               |
 
 To get an ID, turn on **Developer Mode** in Discord's Advanced settings, then right-click the server or channel and choose **Copy ID**.

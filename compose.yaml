@@ -1,0 +1,13 @@
+# For trying the container locally. Production does not use this file.
+services:
+  bot:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_PATH: /data/fade-house.db
+    volumes:
+      - data:/data
+    restart: unless-stopped
+
+volumes:
+  data:
